@@ -1,0 +1,499 @@
+// Africa Marketplace SaaS — Prisma Schema
+// Production-ready, scalable
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ UTILISATEURS & RÔLES ============
+enum Role {
+  SUPER_ADMIN
+  SUPPLIER
+  AFFILIATE
+  COURIER
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  PENDING_VERIFICATION
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  passwordHash  String      @map("password_hash")
+  role          Role
+  status        UserStatus  @default(ACTIVE)
+  phone         String?
+  firstName     String      @map("first_name")
+  lastName      String      @map("last_name")
+  avatarUrl     String?     @map("avatar_url")
+  locale        String      @default("fr")
+  timezone      String      @default("Africa/Porto-Novo")
+  lastLoginAt   DateTime?   @map("last_login_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  companyProfile   CompanyProfile?
+  courierProfile   CourierProfile?
+  wallet           Wallet?
+  affiliateLinks   AffiliateLink[]
+  commissions      Commission[]
+  ordersAsClient   Order[]          @relation("OrderClient")
+  ordersAsCourier  Delivery[]       @relation("DeliveryCourier")
+  withdrawalReqs   WithdrawalRequest[]
+  payments         Payment[]
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ============ ENTREPRISE / FOURNISSEUR ============
+model CompanyProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName     String   @map("company_name")
+  slug            String   @unique
+  description     String?
+  logoUrl         String?  @map("logo_url")
+  country         String   @default("BJ")
+  city            String?
+  address         String?
+  taxId           String?  @map("tax_id")
+  bankDetails     Json?    @map("bank_details")
+  defaultAffiliateCommissionPercent Decimal? @map("default_affiliate_commission_percent") @db.Decimal(5, 2)
+  isVerified      Boolean  @default(false) @map("is_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  products        Product[]
+  orders          Order[]  @relation("OrderSupplier")
+  deliveryZones   DeliveryZone[]
+
+  @@map("company_profiles")
+}
+
+// ============ CATÉGORIES (DYNAMIQUES, ILLIMITÉES) ============
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  parentId    String?   @map("parent_id")
+  parent      Category? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+  imageUrl    String?   @map("image_url")
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  products    Product[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+// ============ PRODUITS (OUVERT, ILLIMITÉ) ============
+enum ProductType {
+  PHYSICAL
+  DIGITAL
+  SERVICE
+  SUBSCRIPTION
+  TICKET
+  RECHARGE_CODE
+  BUNDLE
+  COURSE
+  APP
+  DOWNLOAD
+  CUSTOM
+}
+
+model Product {
+  id                    String      @id @default(cuid())
+  companyProfileId      String      @map("company_profile_id")
+  companyProfile        CompanyProfile @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  categoryId            String?     @map("category_id")
+  category              Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name                  String
+  slug                  String
+  description           String?     @db.Text
+  productType           ProductType @default(PHYSICAL) @map("product_type")
+  imageUrls             String[]    @map("image_urls")
+  price                 Decimal     @db.Decimal(12, 2)
+  compareAtPrice        Decimal?    @map("compare_at_price") @db.Decimal(12, 2)
+  costPerItem           Decimal?    @map("cost_per_item") @db.Decimal(12, 2)
+  affiliateCommissionPercent Decimal? @map("affiliate_commission_percent") @db.Decimal(5, 2)
+  sku                   String?     @unique
+  trackInventory        Boolean     @default(true) @map("track_inventory")
+  stockQuantity         Int         @default(0) @map("stock_quantity")
+  allowBackorder        Boolean     @default(false) @map("allow_backorder")
+  weight                Decimal?    @db.Decimal(10, 3)
+  isDigital             Boolean     @default(false) @map("is_digital")
+  downloadUrl           String?     @map("download_url")
+  isActive              Boolean     @default(true) @map("is_active")
+  metadata              Json?       // champs personnalisés
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  attributes   ProductAttribute[]
+  variants     ProductVariant[]
+  orderItems   OrderItem[]
+
+  @@unique([companyProfileId, slug])
+  @@index([categoryId])
+  @@index([companyProfileId])
+  @@map("products")
+}
+
+model ProductAttribute {
+  id        String   @id @default(cuid())
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String   // taille, couleur, stockage, etc.
+  value     String?
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@map("product_attributes")
+}
+
+model ProductVariant {
+  id           String   @id @default(cuid())
+  productId    String   @map("product_id")
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name         String   // ex: "Rouge - L"
+  sku          String?  @unique
+  price        Decimal  @db.Decimal(12, 2)
+  stockQuantity Int     @default(0) @map("stock_quantity")
+  attributes   Json?    // { size: "L", color: "red" }
+  imageUrl     String?  @map("image_url")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orderItems   OrderItem[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// ============ COMMANDES ============
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentModeOrder {
+  FULL_UPFRONT
+  PARTIAL_ADVANCE
+  PAY_ON_DELIVERY
+}
+
+model Order {
+  id                  String          @id @default(cuid())
+  orderNumber         String          @unique @map("order_number")
+  userId              String          @map("user_id")
+  user                User            @relation("OrderClient", fields: [userId], references: [id])
+  companyProfileId    String          @map("company_profile_id")
+  companyProfile      CompanyProfile  @relation("OrderSupplier", fields: [companyProfileId], references: [id])
+  status              OrderStatus     @default(PENDING)
+  paymentMode         PaymentModeOrder @map("payment_mode")
+  advancePercent      Decimal?        @map("advance_percent") @db.Decimal(5, 2)
+  subtotal            Decimal         @db.Decimal(12, 2)
+  shippingAmount      Decimal         @default(0) @map("shipping_amount") @db.Decimal(12, 2)
+  taxAmount           Decimal         @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  total               Decimal         @db.Decimal(12, 2)
+  advancePaid         Decimal         @default(0) @map("advance_paid") @db.Decimal(12, 2)
+  balanceDue          Decimal         @default(0) @map("balance_due") @db.Decimal(12, 2)
+  currency            String          @default("XOF")
+  affiliateLinkId     String?         @map("affiliate_link_id")
+  affiliateLink       AffiliateLink?  @relation(fields: [affiliateLinkId], references: [id])
+  shippingAddress     Json            @map("shipping_address")
+  notes               String?         @db.Text
+  metadata            Json?
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  items     OrderItem[]
+  payments  Payment[]
+  delivery  Delivery?
+  commissions Commission[]
+
+  @@index([userId])
+  @@index([companyProfileId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String   @map("order_id")
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id])
+  variantId       String?  @map("variant_id")
+  variant         ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity        Int
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(12, 2)
+  total           Decimal  @db.Decimal(12, 2)
+  affiliateCommissionPercent Decimal? @map("affiliate_commission_percent") @db.Decimal(5, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ============ AFFILIATION ============
+model AffiliateLink {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String?  @map("product_id")
+  slug          String   @unique
+  referralCode  String   @map("referral_code") @unique
+  utmSource     String?  @map("utm_source")
+  utmMedium     String?  @map("utm_medium")
+  utmCampaign   String?  @map("utm_campaign")
+  clickCount    Int      @default(0) @map("click_count")
+  conversionCount Int    @default(0) @map("conversion_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  orders        Order[]
+  commissions   Commission[]
+
+  @@index([userId])
+  @@map("affiliate_links")
+}
+
+// ============ COMMISSIONS ============
+enum CommissionType {
+  PLATFORM
+  AFFILIATE
+  COURIER
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+model Commission {
+  id            String           @id @default(cuid())
+  orderId       String           @map("order_id")
+  order         Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId        String?          @map("user_id")
+  user          User?            @relation(fields: [userId], references: [id])
+  affiliateLinkId String?         @map("affiliate_link_id")
+  affiliateLink   AffiliateLink?  @relation(fields: [affiliateLinkId], references: [id])
+  type          CommissionType
+  amount        Decimal          @db.Decimal(12, 2)
+  percent       Decimal?         @db.Decimal(5, 2)
+  status        CommissionStatus @default(PENDING)
+  paidAt        DateTime?        @map("paid_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([userId])
+  @@map("commissions")
+}
+
+// ============ LIVRAISON ============
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+model DeliveryZone {
+  id                String   @id @default(cuid())
+  companyProfileId  String   @map("company_profile_id")
+  companyProfile    CompanyProfile @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  name              String
+  country           String   @default("BJ")
+  regions           String[] // villes / zones
+  priceType         String   // FIXED | PER_KM | FREE
+  priceAmount       Decimal? @map("price_amount") @db.Decimal(12, 2)
+  freeAboveAmount   Decimal? @map("free_above_amount") @db.Decimal(12, 2)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([companyProfileId])
+  @@map("delivery_zones")
+}
+
+model CourierProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleType     String?  @map("vehicle_type")
+  idDocumentUrl   String?  @map("id_document_url")
+  isVerified      Boolean  @default(false) @map("is_verified")
+  rating          Decimal  @default(0) @db.Decimal(3, 2)
+  totalDeliveries Int      @default(0) @map("total_deliveries")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+}
+
+model Delivery {
+  id              String         @id @default(cuid())
+  orderId         String         @unique @map("order_id")
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId       String?        @map("courier_id")
+  courier         User?          @relation("DeliveryCourier", fields: [courierId], references: [id], onDelete: SetNull)
+  status          DeliveryStatus @default(PENDING)
+  pickupAddress   Json?          @map("pickup_address")
+  deliveryAddress Json           @map("delivery_address")
+  commissionAmount Decimal?      @map("commission_amount") @db.Decimal(12, 2)
+  proofPhotoUrl   String?        @map("proof_photo_url")
+  signatureUrl    String?        @map("signature_url")
+  notes           String?        @db.Text
+  pickedUpAt      DateTime?      @map("picked_up_at")
+  deliveredAt     DateTime?      @map("delivered_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([courierId])
+  @@map("deliveries")
+}
+
+// ============ PAIEMENTS & WALLET ============
+enum PaymentMethod {
+  STRIPE
+  MOBILE_MONEY_MTN
+  MOBILE_MONEY_MOOV
+  CARD
+  WALLET
+  CASH_ON_DELIVERY
+  ESCROW
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String        @map("order_id")
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId        String        @map("user_id")
+  user          User          @relation(fields: [userId], references: [id])
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("XOF")
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  externalId    String?       @map("external_id")
+  metadata      Json?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([orderId])
+  @@index([userId])
+  @@map("payments")
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  currency  String   @default("XOF")
+  frozen    Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wallets")
+}
+
+// ============ RETRAITS ============
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model WithdrawalRequest {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Decimal          @db.Decimal(12, 2)
+  currency  String           @default("XOF")
+  status    WithdrawalStatus @default(PENDING)
+  method   String?          // mobile_money, bank
+  details   Json?
+  processedAt DateTime?      @map("processed_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("withdrawal_requests")
+}
+
+// ============ RÈGLES GLOBALES (SUPER ADMIN) ============
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  group     String?  // payment, delivery, commission, feature_flags
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// ============ AUDIT ============
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  details    Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([resource])
+  @@map("audit_logs")
+}

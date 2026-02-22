@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-secret-min-32-characters-long
+          REFRESH_SECRET: refresh-ci-secret-min-32-chars
+          REDIS_URL: redis://localhost:6379
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  test-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+      - run: npx prisma db seed
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: seed-secret
+          REFRESH_SECRET: refresh-seed

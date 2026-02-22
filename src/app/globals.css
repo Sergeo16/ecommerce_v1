@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground: oklch(0.15 0 0);
+  --background: oklch(0.98 0 0);
+}
+
+[data-theme="dark"],
+.dark {
+  --foreground: oklch(0.95 0 0);
+  --background: oklch(0.12 0 0);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+/* DaisyUI themes déjà chargés via config */
