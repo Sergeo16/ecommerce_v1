@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body className="min-h-screen bg-base-100 text-base-content">
+      <body className="min-h-screen bg-base-100 text-base-content overflow-x-hidden w-full max-w-full">
         <ThemeProvider>
           <LocaleProvider>
             <AuthProvider>

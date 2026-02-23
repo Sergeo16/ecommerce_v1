@@ -3,64 +3,127 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+
+type Product = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  imageUrls: string[];
+  mainImageIndex?: number;
+  videoUrls?: string[];
+  companyProfile?: { companyName: string; slug: string };
+  category?: { name: string };
+};
 
 export default function ProductPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
   const { t } = useLocale();
-  const [product, setProduct] = useState<{
-    id: string;
-    name: string;
-    description: string | null;
-    price: number;
-    imageUrls: string[];
-    companyProfile?: { companyName: string; slug: string };
-    category?: { name: string };
-  } | null>(null);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     if (!slug) return;
     const url = id ? `/api/products/${id}` : `/api/products/slug/${slug}`;
     fetch(url)
       .then((r) => (r.ok ? r.json() : null))
-      .then(setProduct);
+      .then((p) => {
+        if (p) setProduct(p);
+      });
   }, [id, slug]);
+
+  useEffect(() => {
+    if (product?.imageUrls?.length) {
+      const main = product.mainImageIndex ?? 0;
+      setSelectedImageIndex(main >= 0 && main < product.imageUrls.length ? main : 0);
+    }
+  }, [product?.id, product?.imageUrls, product?.mainImageIndex]);
 
   if (!product) return <div className="p-8 text-center">{t('loading')}</div>;
 
+  const images = product.imageUrls ?? [];
+  const videos = product.videoUrls ?? [];
+  const mainIndex = product.mainImageIndex ?? 0;
+  const displayIndex = selectedImageIndex >= 0 && selectedImageIndex < images.length ? selectedImageIndex : mainIndex;
+  const mainImageUrl = images[displayIndex] ?? images[0];
+
   return (
     <div className="min-h-screen bg-base-200">
-      <header className="navbar bg-base-100 px-4">
-        <div className="navbar-start">
-          <Link href="/catalog" className="btn btn-ghost">← {t('catalog')}</Link>
+      <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 sm:min-h-14 py-1 gap-1 sm:gap-2 flex-nowrap overflow-x-hidden w-full max-w-full">
+        <div className="navbar-start shrink-0 min-w-0 max-w-[70%] sm:max-w-none flex-nowrap gap-1">
+          <AppLogo className="btn btn-ghost btn-sm text-base px-1 truncate max-w-[100px] sm:max-w-[140px] md:max-w-none" />
+          <Link href="/catalog" className="btn btn-ghost btn-sm whitespace-nowrap shrink-0">← {t('catalog')}</Link>
         </div>
-        <div className="navbar-end gap-1">
+        <div className="navbar-end shrink-0 flex-nowrap gap-1">
           <ThemeSwitcher />
           <LocaleSwitcher />
         </div>
       </header>
-      <main className="container mx-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <figure className="bg-base-300 rounded-lg h-80 flex items-center justify-center">
-            {product.imageUrls?.[0] ? (
-              <img src={product.imageUrls[0]} alt={product.name} className="rounded-lg object-cover w-full h-full" />
-            ) : (
-              <span className="text-8xl opacity-50">📦</span>
+      <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+          {/* Galerie : image principale + miniatures */}
+          <div className="space-y-3">
+            <figure className="bg-base-300 rounded-lg aspect-square max-h-[400px] flex items-center justify-center overflow-hidden">
+              {mainImageUrl ? (
+                <img
+                  src={mainImageUrl}
+                  alt={product.name}
+                  className="object-contain w-full h-full"
+                />
+              ) : (
+                <span className="text-8xl opacity-50">📦</span>
+              )}
+            </figure>
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {images.map((url, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
+                      i === displayIndex ? 'border-primary' : 'border-base-300'
+                    }`}
+                    onClick={() => setSelectedImageIndex(i)}
+                  >
+                    <img src={url} alt="" className="object-cover w-full h-full" />
+                  </button>
+                ))}
+              </div>
             )}
-          </figure>
+            {/* Vidéos (tout utilisateur peut voir) */}
+            {videos.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-base-300">
+                <h3 className="font-semibold">Vidéos</h3>
+                {videos.map((url, i) => (
+                  <div key={i} className="rounded-lg overflow-hidden bg-base-300 aspect-video max-h-64">
+                    <video src={url} controls className="w-full h-full object-contain" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div>
-            <h1 className="text-3xl font-bold">{product.name}</h1>
-            {product.category && <p className="badge badge-ghost mt-2">{product.category.name}</p>}
-            <p className="text-2xl text-primary font-bold mt-4">{product.price.toLocaleString()} XOF</p>
-            {product.description && <p className="mt-4 text-base-content/80">{product.description}</p>}
-            {product.companyProfile && (
-              <p className="mt-2 text-sm">{t('soldBy')} {product.companyProfile.companyName}</p>
+            <h1 className="text-2xl sm:text-3xl font-bold break-words">{product.name}</h1>
+            {product.category && (
+              <p className="badge badge-ghost mt-2">{product.category.name}</p>
             )}
-            <div className="mt-6 flex gap-4">
+            <p className="text-2xl text-primary font-bold mt-4">{product.price.toLocaleString()} XOF</p>
+            {product.description && (
+              <div className="mt-4 text-base-content/80 prose prose-sm max-w-none">
+                <p className="whitespace-pre-wrap break-words">{product.description}</p>
+              </div>
+            )}
+            {product.companyProfile && (
+              <p className="mt-2 text-sm opacity-80">{t('soldBy')} {product.companyProfile.companyName}</p>
+            )}
+            <div className="mt-6 flex flex-wrap gap-4">
               <Link href={`/checkout?productId=${product.id}&qty=1`} className="btn btn-primary">
                 {t('buy')}
               </Link>

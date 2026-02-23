@@ -1,22 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+const PUBLISHER_ROLES = ['SUPPLIER', 'SUPER_ADMIN', 'AFFILIATE'] as const;
+
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || (role !== 'SUPPLIER' && role !== 'SUPER_ADMIN')) {
+  if (!userId || !PUBLISHER_ROLES.includes(role as any)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const cp = await prisma.companyProfile.findFirst({ where: { userId } });
-  if (!cp && role === 'SUPPLIER') return NextResponse.json({ products: [] });
+  let companyId: string | null = cp?.id ?? null;
+  if (role === 'AFFILIATE' && !companyId) {
+    const first = await prisma.companyProfile.findFirst();
+    companyId = first?.id ?? null;
+  }
+  if (role === 'SUPPLIER' && !companyId) return NextResponse.json({ products: [] });
 
-  const where = role === 'SUPER_ADMIN' ? {} : { companyProfileId: cp!.id };
+  const where = role === 'SUPER_ADMIN' ? {} : { companyProfileId: companyId! };
   const products = await prisma.product.findMany({
-    where,
+    where: Object.keys(where).length ? where : undefined,
     include: { category: { select: { name: true, slug: true } } },
     orderBy: { createdAt: 'desc' },
   });
+
   return NextResponse.json(
     products.map((p) => ({
       ...p,
@@ -27,20 +35,30 @@ export async function GET(request: NextRequest) {
   );
 }
 
+const MAX_IMAGES = 10;
+const MAX_VIDEOS = 2;
+
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || (role !== 'SUPPLIER' && role !== 'SUPER_ADMIN')) {
+  if (!userId || !PUBLISHER_ROLES.includes(role as any)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const cp = await prisma.companyProfile.findFirst({ where: { userId } });
-  if (!cp && role === 'SUPPLIER') return NextResponse.json({ error: 'Company profile required' }, { status: 403 });
+  let companyId: string | null = cp?.id ?? null;
+  if (role === 'AFFILIATE' && !companyId) {
+    const first = await prisma.companyProfile.findFirst();
+    companyId = first?.id ?? null;
+  }
+  if (role === 'SUPPLIER' && !companyId) return NextResponse.json({ error: 'Company profile required' }, { status: 403 });
+  if (role === 'AFFILIATE' && !companyId) return NextResponse.json({ error: 'Aucune entreprise plateforme. Créez-en une (seed).' }, { status: 400 });
 
   const body = await request.json();
-  const name = typeof body.name === 'string' ? body.name : '';
-  const slug = typeof body.slug === 'string' ? body.slug : name.toLowerCase().replace(/\s+/g, '-');
-  const description = body.description ?? null;
+  if (role === 'SUPER_ADMIN' && !companyId) companyId = body.companyProfileId ?? (await prisma.companyProfile.findFirst())?.id ?? null;
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const slug = typeof body.slug === 'string' ? body.slug.trim() : name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const description = body.description != null ? String(body.description) : null;
   const productType = body.productType ?? 'PHYSICAL';
   const price = parseFloat(body.price);
   const affiliateCommissionPercent = body.affiliateCommissionPercent != null ? parseFloat(body.affiliateCommissionPercent) : null;
@@ -48,13 +66,19 @@ export async function POST(request: NextRequest) {
   const trackInventory = body.trackInventory !== false;
   const stockQuantity = parseInt(body.stockQuantity, 10) || 0;
   const categoryId = body.categoryId ?? null;
-  const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls : [];
+  let imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
+  let videoUrls = Array.isArray(body.videoUrls) ? body.videoUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
+  let mainImageIndex = typeof body.mainImageIndex === 'number' ? Math.max(0, Math.min(body.mainImageIndex, imageUrls.length - 1)) : 0;
+
+  if (imageUrls.length > MAX_IMAGES) imageUrls = imageUrls.slice(0, MAX_IMAGES);
+  if (videoUrls.length > MAX_VIDEOS) videoUrls = videoUrls.slice(0, MAX_VIDEOS);
+  if (mainImageIndex >= imageUrls.length) mainImageIndex = 0;
 
   if (!name || !Number.isFinite(price)) {
     return NextResponse.json({ error: 'name et price requis' }, { status: 400 });
   }
 
-  const companyId = cp?.id ?? body.companyProfileId;
+  if (!companyId) companyId = body.companyProfileId ?? null;
   if (!companyId) return NextResponse.json({ error: 'companyProfileId required' }, { status: 400 });
 
   const product = await prisma.product.create({
@@ -71,6 +95,8 @@ export async function POST(request: NextRequest) {
       trackInventory,
       stockQuantity,
       imageUrls,
+      mainImageIndex,
+      videoUrls,
       isActive: true,
     },
   });

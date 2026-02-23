@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
@@ -12,6 +13,8 @@ export default function DashboardPage() {
   const { t } = useLocale();
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [affiliateStats, setAffiliateStats] = useState<Record<string, unknown> | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!token || !user) return;
@@ -29,6 +32,11 @@ export default function DashboardPage() {
     }
   }, [token, user]);
 
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    if (menuOpen) { document.addEventListener('click', fn); return () => document.removeEventListener('click', fn); }
+  }, [menuOpen]);
+
   if (isLoading) return <div className="p-8">{t('loading')}</div>;
   if (!user) {
     return (
@@ -41,19 +49,40 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-base-200">
-      <header className="navbar bg-base-100 shadow-lg px-4">
-        <div className="navbar-start">
-          <Link href="/" className="btn btn-ghost text-xl">{t('appName')}</Link>
+      <header className="navbar bg-base-100 shadow-lg px-2 sm:px-4 min-h-12 sm:min-h-14 py-1 gap-1 sm:gap-2 flex-nowrap overflow-x-hidden w-full max-w-full">
+        <div className="navbar-start shrink-0 min-w-0 max-w-[40%] sm:max-w-none">
+          <AppLogo className="btn btn-ghost btn-sm sm:btn-ghost text-base sm:text-xl px-1 sm:px-2 truncate max-w-[120px] sm:max-w-[180px] md:max-w-none" />
         </div>
-        <div className="navbar-center gap-4 flex">
-          <Link href="/catalog" className="link">{t('catalog')}</Link>
-          <Link href="/dashboard" className="link font-semibold">{t('dashboard')}</Link>
-        </div>
-        <div className="navbar-end gap-1">
-          <ThemeSwitcher />
-          <LocaleSwitcher />
-          <span className="text-sm opacity-80">{user.firstName} ({user.role})</span>
-          <button type="button" onClick={logout} className="btn btn-ghost btn-sm">{t('logout')}</button>
+        <nav className="navbar-center flex-1 justify-center hidden md:flex flex-nowrap gap-2 lg:gap-4 min-w-0" aria-label="Navigation">
+          <Link href="/catalog" className="link link-hover whitespace-nowrap">{t('catalog')}</Link>
+          <Link href="/dashboard" className="link link-hover font-semibold whitespace-nowrap">{t('dashboard')}</Link>
+        </nav>
+        <div className="navbar-end shrink-0 flex-nowrap gap-1">
+          <div className="hidden md:flex items-center gap-1">
+            <ThemeSwitcher />
+            <LocaleSwitcher />
+          </div>
+          <span className="hidden lg:inline text-sm opacity-80 truncate max-w-[100px]">{user.firstName}</span>
+          <button type="button" onClick={logout} className="btn btn-ghost btn-sm hidden md:inline-flex">{t('logout')}</button>
+          <div className="md:hidden relative" ref={menuRef}>
+            <button type="button" className="btn btn-ghost btn-sm btn-square" onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Menu">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {menuOpen ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-52 rounded-lg shadow-xl bg-base-100 border border-base-300 py-2 z-50">
+                <Link href="/catalog" className="block px-4 py-2 hover:bg-base-200" onClick={() => setMenuOpen(false)}>{t('catalog')}</Link>
+                <Link href="/dashboard" className="block px-4 py-2 hover:bg-base-200 font-semibold" onClick={() => setMenuOpen(false)}>{t('dashboard')}</Link>
+                <div className="border-t border-base-300 my-2" />
+                <div className="px-4 py-2 flex gap-2"><ThemeSwitcher /><LocaleSwitcher /></div>
+                <div className="px-4 py-2 border-t border-base-300">
+                  <span className="text-sm opacity-80">{user.firstName} ({user.role})</span>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm w-full justify-start px-4" onClick={() => { setMenuOpen(false); logout(); }}>{t('logout')}</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -111,8 +140,11 @@ export default function DashboardPage() {
               <Link href="/dashboard/affiliate/withdraw" className="btn btn-outline">{t('requestWithdrawal')}</Link>
             </>
           )}
-          {user.role === 'SUPPLIER' && (
-            <Link href="/dashboard/supplier/products" className="btn btn-primary">{t('myProducts')}</Link>
+          {(user.role === 'SUPPLIER' || user.role === 'AFFILIATE' || user.role === 'SUPER_ADMIN') && (
+            <>
+              <Link href="/dashboard/products" className="btn btn-primary">{t('myProducts')}</Link>
+              <Link href="/dashboard/products/new" className="btn btn-outline">{t('publishProduct')}</Link>
+            </>
           )}
           {user.role === 'COURIER' && (
             <Link href="/dashboard/courier/missions" className="btn btn-primary">{t('myMissions')}</Link>

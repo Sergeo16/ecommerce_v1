@@ -13,12 +13,12 @@ export function LocaleSwitcher({ className = '' }: { className?: string }) {
 
   return (
     <div className={`dropdown dropdown-end ${className}`}>
-      <label tabIndex={0} className="btn btn-ghost btn-sm gap-1">
-        <span className="opacity-70">🌐</span>
-        <span className="hidden sm:inline">{t('language')}</span>
-        <span className="text-xs uppercase opacity-80">{locale}</span>
+      <label tabIndex={0} className="btn btn-ghost btn-sm gap-1 px-2 sm:px-3 min-w-0 shrink-0">
+        <span className="opacity-70 shrink-0" aria-hidden>🌐</span>
+        <span className="hidden lg:inline">{t('language')}</span>
+        <span className="text-xs uppercase opacity-80 shrink-0">{locale}</span>
       </label>
-      <ul tabIndex={0} className="dropdown-content menu z-50 p-2 shadow-lg bg-base-200 rounded-box w-40 mt-2">
+      <ul tabIndex={0} className="dropdown-content menu z-[110] p-2 shadow-xl bg-base-100 border border-base-300 rounded-box w-40 mt-2">
         {LOCALES.map(({ value, label }) => (
           <li key={value}>
             <button

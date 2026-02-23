@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
@@ -33,7 +34,10 @@ export default function AffiliateLinksPage() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">← {t('dashboard')}</Link>
+        <div className="flex items-center gap-2">
+          <AppLogo className="btn btn-ghost btn-sm text-base" />
+          <Link href="/dashboard" className="btn btn-ghost btn-sm">← {t('dashboard')}</Link>
+        </div>
         <div className="flex gap-1">
           <ThemeSwitcher />
           <LocaleSwitcher />

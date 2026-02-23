@@ -67,8 +67,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const body = await request.json();
   const items = Array.isArray(body.items) ? body.items : [];
   const affiliateLinkId = typeof body.affiliateLinkId === 'string' ? body.affiliateLinkId : null;
@@ -76,11 +74,21 @@ export async function POST(request: NextRequest) {
   const advancePercent = typeof body.advancePercent === 'number' ? body.advancePercent : null;
   const shippingAddress = body.shippingAddress && typeof body.shippingAddress === 'object' ? body.shippingAddress : null;
 
+  const isGuest = !userId;
+  const guestEmail = typeof body.guestEmail === 'string' ? body.guestEmail.trim() : '';
+  const guestFirstName = typeof body.guestFirstName === 'string' ? body.guestFirstName.trim().slice(0, 100) : null;
+  const guestLastName = typeof body.guestLastName === 'string' ? body.guestLastName.trim().slice(0, 100) : null;
+
   if (items.length === 0 || !shippingAddress) {
     return NextResponse.json({ error: 'items et shippingAddress requis' }, { status: 400 });
   }
+  if (isGuest) {
+    if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      return NextResponse.json({ error: 'guestEmail valide requis pour achat invité' }, { status: 400 });
+    }
+  }
 
-  const rules = await getPaymentRules({ userId });
+  const rules = await getPaymentRules({ userId: userId ?? undefined });
   if (paymentMode === 'PARTIAL_ADVANCE' && (!rules.partialAdvance || (advancePercent ?? 0) < rules.minAdvancePercent)) {
     return NextResponse.json({ error: 'Avance minimum: ' + rules.minAdvancePercent + '%' }, { status: 400 });
   }
@@ -110,7 +118,10 @@ export async function POST(request: NextRequest) {
   const order = await prisma.order.create({
     data: {
       orderNumber,
-      userId,
+      userId: userId ?? null,
+      guestEmail: isGuest ? guestEmail : null,
+      guestFirstName: isGuest ? guestFirstName : null,
+      guestLastName: isGuest ? guestLastName : null,
       companyProfileId: companyId,
       status: 'PENDING',
       paymentMode,

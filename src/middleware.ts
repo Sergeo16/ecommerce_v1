@@ -15,6 +15,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // POST /api/orders : auth optionnelle (checkout invité ou connecté)
+  if (path === '/api/orders' && request.method === 'POST') {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const payload = await verifyAccessToken(authHeader.slice(7));
+      if (payload) {
+        const reqHeaders = new Headers(request.headers);
+        reqHeaders.set('x-user-id', payload.sub);
+        reqHeaders.set('x-user-role', payload.role);
+        return NextResponse.next({ request: { headers: reqHeaders } });
+      }
+    }
+    return NextResponse.next();
+  }
+
   // Routes API protégées
   if (path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/orders') || path.startsWith('/api/affiliate') || path.startsWith('/api/courier') || path.startsWith('/api/supplier')) {
     const authHeader = request.headers.get('authorization');
