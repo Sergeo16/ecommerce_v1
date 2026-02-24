@@ -18,21 +18,22 @@ body {
   background: var(--background);
 }
 
-/* Navbar : une seule ligne, pas d'ascenseur vertical, dropdowns visibles */
+/* Navbar : une seule ligne, pas de barre de défilement, dropdowns visibles */
 .navbar {
-  height: 3rem;
   min-height: 3rem;
-  max-height: 3rem;
   overflow-x: hidden !important;
-  overflow-y: visible !important;
+  overflow-y: hidden !important; /* supprime la barre de défilement verticale */
   flex-wrap: nowrap !important;
   align-items: center;
   display: flex;
 }
+/* Les dropdowns DaisyUI s’affichent au-dessus (z-index), pas de clip gênant */
 .navbar .navbar-start,
 .navbar .navbar-end {
   align-items: center;
   flex-shrink: 0;
+  min-height: 0;
+  overflow: visible; /* les menus déroulants restent visibles */
 }
 .navbar .navbar-center {
   min-width: 0;

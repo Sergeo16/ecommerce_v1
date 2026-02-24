@@ -25,11 +25,11 @@ export default function HomePage() {
   return (
     <>
       {/* Navbar : une seule ligne sur tous les écrans (menu hamburger sur mobile) */}
-      <header className="border-b border-base-300 bg-base-100/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm overflow-x-hidden overflow-y-visible w-full max-w-full">
+      <header className="border-b border-base-300 bg-base-100/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm overflow-x-hidden w-full max-w-full">
         <div className="container mx-auto px-4 sm:px-5 w-full max-w-full min-w-0">
           <div className="navbar min-h-12 sm:min-h-14 py-0 gap-2 sm:gap-3 md:gap-4 flex-nowrap w-full max-w-full min-w-0">
             {/* Logo : marge à gauche, troncature sur petit écran */}
-            <div className="navbar-start shrink-0 min-w-0 max-w-[40%] sm:max-w-none pl-0 pr-1">
+            <div className="navbar-start shrink-0 min-w-0 max-w-[40%] sm:max-w-none pl-0 pr-2">
               <AppLogo className="btn btn-ghost text-base sm:text-xl font-bold tracking-tight px-2 sm:px-3 py-2 normal-case hover:opacity-90 no-underline truncate max-w-[110px] sm:max-w-[180px] md:max-w-none" />
             </div>
 
@@ -46,13 +46,13 @@ export default function HomePage() {
               </Link>
             </nav>
 
-            {/* Droite : thème + langue + Dashboard — padding pour éviter tout débordement */}
-            <div className="navbar-end shrink-0 flex-nowrap gap-1 sm:gap-2 pr-0 sm:pr-1">
-              <div className="hidden md:flex items-center flex-nowrap gap-1">
+            {/* Droite : thème + langue + Dashboard — padding pour éviter débordement et chevauchement */}
+            <div className="navbar-end shrink-0 flex-nowrap gap-2 sm:gap-3 pr-2 sm:pr-4 pl-2">
+              <div className="hidden md:flex items-center flex-nowrap gap-2">
                 <ThemeSwitcher />
                 <LocaleSwitcher />
               </div>
-              <Link href="/dashboard" className="btn btn-primary btn-sm sm:btn-md shadow-md hidden md:inline-flex whitespace-nowrap flex-shrink-0 px-3 sm:px-4">
+              <Link href="/dashboard" className="btn btn-primary btn-sm sm:btn-md shadow-md hidden md:inline-flex whitespace-nowrap flex-shrink-0 px-3 sm:px-4 ml-0.5">
                 {t('dashboard')}
               </Link>
 
