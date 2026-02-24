@@ -17,7 +17,13 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [role, setRole] = useState<'CLIENT' | 'AFFILIATE' | 'SUPPLIER' | 'COURIER'>(
     roleParam === 'affiliate' ? 'AFFILIATE' : roleParam === 'supplier' ? 'SUPPLIER' : roleParam === 'courier' ? 'COURIER' : 'CLIENT'
   );
@@ -26,8 +32,51 @@ export default function RegisterPage() {
   const { login } = useAuth();
   const router = useRouter();
 
+  const isSupplier = role === 'SUPPLIER';
+
   function validateEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  async function handleUseMyLocation() {
+    if (!navigator.geolocation) {
+      setLocationError(t('locationError'));
+      return;
+    }
+    setLocationError(null);
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setAddressCoords({ lat, lng });
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'AfricaMarketplace-Register/1.0' } }
+          );
+          const data = await res.json();
+          if (data?.address) {
+            const a = data.address;
+            const parts = [a.road, a.house_number, a.street, a.village, a.town, a.city].filter(Boolean);
+            setAddress(parts.slice(0, 3).join(', ') || data.display_name?.slice(0, 300) || '');
+            setCity([a.city, a.town, a.village].find(Boolean) || '');
+          } else {
+            setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          }
+          setLocationError(null);
+        } catch {
+          setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          setLocationError(null);
+        }
+        setLocationLoading(false);
+      },
+      (err) => {
+        setLocationLoading(false);
+        setLocationError(err.code === 1 ? t('locationDenied') : t('locationError'));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -41,19 +90,44 @@ export default function RegisterPage() {
       setError(t('emailInvalid') ?? 'Adresse email invalide.');
       return;
     }
+    if (isSupplier) {
+      if (!companyName.trim()) {
+        setError(t('companyNameRequiredSupplier'));
+        return;
+      }
+      if (!phone.trim()) {
+        setError(t('phoneRequiredSupplier'));
+        return;
+      }
+      const hasAddressText = address.trim().length > 0 && city.trim().length > 0;
+      if (!hasAddressText && !addressCoords) {
+        setError(t('addressRequiredSupplier'));
+        return;
+      }
+    }
     setLoading(true);
     try {
+      const body: Record<string, unknown> = {
+        email,
+        password,
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        role,
+      };
+      if (isSupplier) {
+        body.companyName = companyName.trim();
+        body.address = address.trim() || undefined;
+        body.city = city.trim() || undefined;
+        if (addressCoords) {
+          body.addressLat = addressCoords.lat;
+          body.addressLng = addressCoords.lng;
+        }
+      }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          firstName,
-          lastName,
-          phone: phone || undefined,
-          role,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? t('registerError'));
@@ -81,24 +155,36 @@ export default function RegisterPage() {
           <h1 className="card-title text-xl sm:text-2xl break-words">{t('signUp')}</h1>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {error && <div className="alert alert-error text-sm break-words">{error}</div>}
+            {isSupplier && (
+              <input
+                type="text"
+                placeholder={`${t('companyName')} *`}
+                className="input input-bordered w-full min-w-0"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value.slice(0, 200))}
+                required={isSupplier}
+                maxLength={200}
+                autoComplete="organization"
+              />
+            )}
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
-                placeholder={t('firstName')}
+                placeholder={isSupplier ? t('firstNameOptional') : t('firstName')}
                 className="input input-bordered flex-1 min-w-0"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value.slice(0, 100))}
-                required
+                required={!isSupplier}
                 maxLength={100}
                 autoComplete="given-name"
               />
               <input
                 type="text"
-                placeholder={t('lastName')}
+                placeholder={isSupplier ? t('lastNameOptional') : t('lastName')}
                 className="input input-bordered flex-1 min-w-0"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value.slice(0, 100))}
-                required
+                required={!isSupplier}
                 maxLength={100}
                 autoComplete="family-name"
               />
@@ -126,13 +212,51 @@ export default function RegisterPage() {
             />
             <input
               type="tel"
-              placeholder={t('phone')}
+              placeholder={isSupplier ? `${t('phoneLabel')} *` : t('phone')}
               className="input input-bordered w-full min-w-0"
               value={phone}
               onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+              required={isSupplier}
               maxLength={20}
               autoComplete="tel"
             />
+            {isSupplier && (
+              <>
+                <div className="divider text-sm">{t('supplierAddressLabel')} *</div>
+                <div className="flex flex-wrap gap-2 items-start">
+                  <input
+                    type="text"
+                    placeholder={t('address')}
+                    className="input input-bordered flex-1 min-w-0"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value.slice(0, 300))}
+                    maxLength={300}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm gap-1 shrink-0"
+                    onClick={handleUseMyLocation}
+                    disabled={locationLoading}
+                    title={t('useMyLocation')}
+                  >
+                    {locationLoading ? <span className="loading loading-spinner loading-sm" /> : '📍'}
+                    <span className="hidden sm:inline">{t('useMyLocation')}</span>
+                  </button>
+                </div>
+                {addressCoords && (
+                  <p className="text-sm text-success">✓ {t('locationSuccess')}: {addressCoords.lat.toFixed(5)}, {addressCoords.lng.toFixed(5)}</p>
+                )}
+                {locationError && <p className="text-sm text-error">{locationError}</p>}
+                <input
+                  type="text"
+                  placeholder={t('city')}
+                  className="input input-bordered w-full min-w-0"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                />
+              </>
+            )}
             <div className="form-control">
               <label className="label">{t('iAm')}</label>
               <select

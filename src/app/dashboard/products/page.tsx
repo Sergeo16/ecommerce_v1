@@ -13,6 +13,7 @@ type Product = {
   name: string;
   slug: string;
   price: number;
+  currency?: string;
   imageUrls: string[];
   mainImageIndex?: number;
   category?: { name: string; slug: string };
@@ -89,7 +90,7 @@ export default function MyProductsPage() {
                     </figure>
                     <div className="card-body p-4">
                       <h2 className="card-title text-sm line-clamp-2">{p.name}</h2>
-                      <p className="text-primary font-bold">{p.price?.toLocaleString()} XOF</p>
+                      <p className="text-primary font-bold">{p.price?.toLocaleString()} {p.currency ?? 'XOF'}</p>
                     </div>
                   </div>
                 </Link>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { getSupplierIdentityVisible } from '@/lib/rules-engine';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -39,13 +40,18 @@ export async function GET(request: NextRequest) {
     prisma.product.count({ where }),
   ]);
 
+  const showSupplier = await getSupplierIdentityVisible();
   return NextResponse.json({
-    products: products.map((p) => ({
-      ...p,
-      price: Number(p.price),
-      compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : null,
-      affiliateCommissionPercent: p.affiliateCommissionPercent ? Number(p.affiliateCommissionPercent) : null,
-    })),
+    products: products.map((p) => {
+      const out: Record<string, unknown> = {
+        ...p,
+        price: Number(p.price),
+        compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : null,
+        affiliateCommissionPercent: p.affiliateCommissionPercent ? Number(p.affiliateCommissionPercent) : null,
+      };
+      if (!showSupplier) out.companyProfile = null;
+      return out;
+    }),
     total,
     page,
     limit,

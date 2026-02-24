@@ -65,7 +65,26 @@ export async function POST(request: NextRequest) {
   const sku = body.sku ?? null;
   const trackInventory = body.trackInventory !== false;
   const stockQuantity = parseInt(body.stockQuantity, 10) || 0;
-  const categoryId = body.categoryId ?? null;
+  let categoryId = body.categoryId ?? null;
+  const categoryName = typeof body.categoryName === 'string' ? body.categoryName.trim() : '';
+  const currency = typeof body.currency === 'string' && body.currency.trim().length > 0 && body.currency.trim().length <= 10
+    ? body.currency.trim().toUpperCase()
+    : 'XOF';
+
+  if (!categoryId && categoryName) {
+    const baseSlug = categoryName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'cat';
+    let cat = await prisma.category.findFirst({
+      where: { name: { equals: categoryName, mode: 'insensitive' } },
+    });
+    if (!cat) {
+      const slug = `${baseSlug}-${Date.now()}`;
+      cat = await prisma.category.create({
+        data: { name: categoryName, slug, isActive: true },
+      });
+    }
+    categoryId = cat.id;
+  }
+
   let imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
   let videoUrls = Array.isArray(body.videoUrls) ? body.videoUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
   let mainImageIndex = typeof body.mainImageIndex === 'number' ? Math.max(0, Math.min(body.mainImageIndex, imageUrls.length - 1)) : 0;
@@ -90,6 +109,7 @@ export async function POST(request: NextRequest) {
       description,
       productType,
       price,
+      currency,
       affiliateCommissionPercent,
       sku,
       trackInventory,

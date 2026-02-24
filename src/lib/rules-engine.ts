@@ -103,3 +103,14 @@ export async function getTheme(): Promise<string> {
   const row = await prisma.settings.findUnique({ where: { key: 'theme' } });
   return (row?.value as string) ?? 'business';
 }
+
+export async function getDeliveryTrackingEnabled(): Promise<boolean> {
+  const v = await getSettingJson<boolean>('delivery_tracking_enabled', true);
+  return v !== false;
+}
+
+/** Par défaut false : masquer l'identité des fournisseurs pour que les clients passent par la plateforme (commissions). */
+export async function getSupplierIdentityVisible(): Promise<boolean> {
+  const v = await getSettingJson<boolean>('supplier_identity_visible', false);
+  return v === true;
+}

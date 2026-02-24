@@ -22,7 +22,7 @@ body {
 .navbar {
   min-height: 3rem;
   overflow-x: hidden !important;
-  overflow-y: hidden !important; /* supprime la barre de défilement verticale */
+  overflow-y: visible !important;
   flex-wrap: nowrap !important;
   align-items: center;
   display: flex;

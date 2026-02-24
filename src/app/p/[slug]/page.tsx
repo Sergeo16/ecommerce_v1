@@ -13,6 +13,7 @@ type Product = {
   name: string;
   description: string | null;
   price: number;
+  currency?: string;
   imageUrls: string[];
   mainImageIndex?: number;
   videoUrls?: string[];
@@ -27,6 +28,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
   const { t } = useLocale();
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (!slug) return;
@@ -114,7 +116,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             {product.category && (
               <p className="badge badge-ghost mt-2">{product.category.name}</p>
             )}
-            <p className="text-2xl text-primary font-bold mt-4">{product.price.toLocaleString()} XOF</p>
+            <p className="text-2xl text-primary font-bold mt-4">{product.price.toLocaleString()} {product.currency ?? 'XOF'}</p>
             {product.description && (
               <div className="mt-4 text-base-content/80 prose prose-sm max-w-none">
                 <p className="whitespace-pre-wrap break-words">{product.description}</p>
@@ -123,8 +125,37 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             {product.companyProfile && (
               <p className="mt-2 text-sm opacity-80">{t('soldBy')} {product.companyProfile.companyName}</p>
             )}
-            <div className="mt-6 flex flex-wrap gap-4">
-              <Link href={`/checkout?productId=${product.id}&qty=1`} className="btn btn-primary">
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{t('quantity')}:</span>
+                <div className="join">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline join-item"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    aria-label="-"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    className="input input-bordered input-sm join-item w-16 text-center"
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Math.min(999, parseInt(e.target.value, 10) || 1)))}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline join-item"
+                    onClick={() => setQuantity((q) => Math.min(999, q + 1))}
+                    aria-label="+"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <Link href={`/checkout?productId=${product.id}&qty=${quantity}`} className="btn btn-primary">
                 {t('buy')}
               </Link>
               <Link href="/catalog" className="btn btn-outline">{t('backToCatalog')}</Link>

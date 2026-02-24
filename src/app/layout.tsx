@@ -3,6 +3,8 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/context/AuthContext';
 import { LocaleProvider } from '@/context/LocaleContext';
+import { MaintenanceGate } from '@/components/MaintenanceGate';
+import { AdminMaintenanceBanner } from '@/components/AdminMaintenanceBanner';
 
 export const metadata: Metadata = {
   title: 'Africa Marketplace — E-commerce & Livraison',
@@ -20,7 +22,10 @@ export default function RootLayout({
         <ThemeProvider>
           <LocaleProvider>
             <AuthProvider>
-              {children}
+              <MaintenanceGate>
+                <AdminMaintenanceBanner />
+                {children}
+              </MaintenanceGate>
             </AuthProvider>
           </LocaleProvider>
         </ThemeProvider>

@@ -30,28 +30,47 @@ export default function AdminSettingsPage() {
   const [minAdvancePercent, setMinAdvancePercent] = useState(30);
   const [platformCommissionPercent, setPlatformCommissionPercent] = useState(5);
   const [defaultTheme, setDefaultTheme] = useState('business');
+  const [deliveryTrackingEnabled, setDeliveryTrackingEnabled] = useState(true);
+  const [supplierIdentityVisible, setSupplierIdentityVisible] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
-    fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((data: Record<string, unknown>) => {
-        const pm = (data.payment_modes as PaymentModes) ?? {};
-        setFullUpfront(pm.fullUpfront ?? true);
-        setPartialAdvance(pm.partialAdvance ?? true);
-        setPayOnDelivery(pm.payOnDelivery ?? true);
-        setMinAdvancePercent(typeof pm.minAdvancePercent === 'number' ? pm.minAdvancePercent : 30);
-        const pct = data.platform_commission_percent ?? data.commission_rules;
-        setPlatformCommissionPercent(
-          typeof pct === 'number' ? pct : typeof pct === 'object' && pct && typeof (pct as { platformPercent?: number }).platformPercent === 'number'
-            ? (pct as { platformPercent: number }).platformPercent
-            : 5
-        );
-        setDefaultTheme(typeof data.theme === 'string' ? data.theme : 'business');
-      })
-      .catch(() => setMessage('error'))
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch('/api/admin/maintenance').then((r) => r.json()),
+    ]).then(([data, maintenanceData]) => {
+      const pm = (data.payment_modes as PaymentModes) ?? {};
+      setFullUpfront(pm.fullUpfront ?? true);
+      setPartialAdvance(pm.partialAdvance ?? true);
+      setPayOnDelivery(pm.payOnDelivery ?? true);
+      setMinAdvancePercent(typeof pm.minAdvancePercent === 'number' ? pm.minAdvancePercent : 30);
+      const pct = data.platform_commission_percent ?? data.commission_rules;
+      setPlatformCommissionPercent(
+        typeof pct === 'number' ? pct : typeof pct === 'object' && pct && typeof (pct as { platformPercent?: number }).platformPercent === 'number'
+          ? (pct as { platformPercent: number }).platformPercent
+          : 5
+      );
+      setDefaultTheme(typeof data.theme === 'string' ? data.theme : 'business');
+      const tracking = data.delivery_tracking_enabled;
+      setDeliveryTrackingEnabled(tracking === false ? false : true);
+      const supplierId = data.supplier_identity_visible;
+      setSupplierIdentityVisible(supplierId === true);
+      setMaintenanceMode((maintenanceData as { maintenance?: boolean }).maintenance === true);
+    })
+    .catch(() => setMessage('error'))
+    .finally(() => setLoading(false));
   }, [token, user?.role]);
+
+  async function setMaintenance(enabled: boolean) {
+    if (!token) return;
+    const res = await fetch('/api/admin/maintenance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (res.ok) setMaintenanceMode(enabled);
+  }
 
   async function putSetting(key: string, value: unknown) {
     if (!token) return;
@@ -81,6 +100,8 @@ export default function AdminSettingsPage() {
         courierFixed: 1500,
       });
       await putSetting('theme', defaultTheme);
+      await putSetting('delivery_tracking_enabled', deliveryTrackingEnabled);
+      await putSetting('supplier_identity_visible', supplierIdentityVisible);
       setMessage('saved');
       setTimeout(() => setMessage(null), 3000);
     } catch {
@@ -117,6 +138,19 @@ export default function AdminSettingsPage() {
         <span className="loading loading-spinner" />
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('maintenanceMode')}</h2>
+            <p className="text-sm opacity-80 mb-3">{t('maintenanceModeDesc')}</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={maintenanceMode}
+                onChange={(e) => setMaintenance(e.target.checked)}
+              />
+              <span>{maintenanceMode ? t('active') : t('suspended')}</span>
+            </label>
+          </div>
           <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
             <h2 className="font-semibold text-lg mb-4">{t('paymentModes')}</h2>
             <div className="space-y-3">
@@ -195,6 +229,34 @@ export default function AdminSettingsPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('deliveryTrackingEnabled')}</h2>
+            <p className="text-sm opacity-80 mb-3">{t('deliveryTrackingEnabledDesc')}</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={deliveryTrackingEnabled}
+                onChange={(e) => setDeliveryTrackingEnabled(e.target.checked)}
+              />
+              <span>{deliveryTrackingEnabled ? t('active') : t('suspended')}</span>
+            </label>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('supplierIdentityVisible')}</h2>
+            <p className="text-sm opacity-80 mb-3">{t('supplierIdentityVisibleDesc')}</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={supplierIdentityVisible}
+                onChange={(e) => setSupplierIdentityVisible(e.target.checked)}
+              />
+              <span>{supplierIdentityVisible ? t('active') : t('suspended')}</span>
+            </label>
           </div>
 
           {message === 'saved' && (

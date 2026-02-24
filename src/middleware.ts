@@ -15,6 +15,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // GET /api/admin/maintenance : public (pour afficher la page maintenance aux visiteurs)
+  if (path === '/api/admin/maintenance' && request.method === 'GET') {
+    return NextResponse.next();
+  }
+
   // POST /api/orders : auth optionnelle (checkout invité ou connecté)
   if (path === '/api/orders' && request.method === 'POST') {
     const authHeader = request.headers.get('authorization');

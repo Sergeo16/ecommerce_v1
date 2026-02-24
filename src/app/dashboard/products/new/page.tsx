@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +12,12 @@ import { useLocale } from '@/context/LocaleContext';
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
 
+const CURRENCY_OPTIONS = ['XOF', 'EUR', 'USD', 'XAF', 'CFA', 'GBP', 'CHF'] as const;
+
+const ALLOWED_NAME = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
+const ALLOWED_DESCRIPTION = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()\n]*$/u;
+const ALLOWED_CATEGORY = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
+
 export default function NewProductPage() {
   const { user, token } = useAuth();
   const { t } = useLocale();
@@ -19,14 +25,21 @@ export default function NewProductPage() {
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingIndex, setUploadingIndex] = useState<{ type: 'image' | 'video'; i: number } | null>(null);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [currencyOption, setCurrencyOption] = useState<string>('XOF');
+  const [currencyCustom, setCurrencyCustom] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [categoryOther, setCategoryOther] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>(['']);
   const [mainImageIndex, setMainImageIndex] = useState(0);
   const [videoUrls, setVideoUrls] = useState<string[]>(['']);
+
+  const imageFileRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const videoFileRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const canPublish = user?.role === 'SUPPLIER' || user?.role === 'SUPER_ADMIN' || user?.role === 'AFFILIATE';
 
@@ -68,31 +81,97 @@ export default function NewProductPage() {
     });
   }
 
+  async function handleFileUpload(file: File, type: 'image' | 'video', index: number) {
+    setUploadingIndex({ type, i: index });
+    setError('');
+    const formData = new FormData();
+    formData.set('file', file);
+    formData.set('type', type);
+    try {
+      const res = await fetch('/api/supplier/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t('uploadFailed'));
+      if (type === 'image') setImageUrl(index, data.url);
+      else setVideoUrl(index, data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('uploadFailed'));
+    } finally {
+      setUploadingIndex(null);
+    }
+  }
+
+  function onImageFileChange(i: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file, 'image', i);
+    e.target.value = '';
+  }
+  function onVideoFileChange(i: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file, 'video', i);
+    e.target.value = '';
+  }
+
+  function getCurrency(): string {
+    if (currencyOption === 'OTHER') return currencyCustom.trim().slice(0, 10) || 'XOF';
+    return currencyOption;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    const nameTrim = name.trim();
+    const descTrim = description.trim();
+    const categoryNameTrim = categoryOther.trim();
+
+    if (!nameTrim) {
+      setError(t('nameRequired'));
+      return;
+    }
+    if (!ALLOWED_NAME.test(nameTrim)) {
+      setError(t('invalidCharactersName'));
+      return;
+    }
+    if (descTrim && !ALLOWED_DESCRIPTION.test(descTrim)) {
+      setError(t('invalidCharactersDescription'));
+      return;
+    }
+    if (categoryNameTrim && !ALLOWED_CATEGORY.test(categoryNameTrim)) {
+      setError(t('invalidCharactersCategory'));
+      return;
+    }
+
+    const priceNum = parseFloat(price);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      setError(t('invalidPrice'));
+      return;
+    }
+
     const images = imageUrls.map((u) => u.trim()).filter(Boolean);
     const videos = videoUrls.map((u) => u.trim()).filter(Boolean);
     const mainIdx = Math.min(mainImageIndex, Math.max(0, images.length - 1));
-    const priceNum = parseFloat(price);
-    if (!name.trim()) {
-      setError('Nom requis.');
+
+    if (images.length === 0) {
+      setError(t('atLeastOneImage'));
       return;
     }
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError('Prix invalide.');
-      return;
-    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/supplier/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
+          name: nameTrim,
+          description: descTrim || null,
           price: priceNum,
-          categoryId: categoryId || null,
+          currency: getCurrency(),
+          categoryId: (categoryId && categoryId !== '__other__') ? categoryId : null,
+          categoryName: useCategoryOther ? categoryNameTrim || undefined : undefined,
           imageUrls: images,
           mainImageIndex: mainIdx,
           videoUrls: videos,
@@ -100,7 +179,7 @@ export default function NewProductPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
-      router.push('/catalog');
+      router.push('/dashboard/products');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -127,6 +206,7 @@ export default function NewProductPage() {
   }
 
   const imagesFiltered = imageUrls.map((u) => u.trim()).filter(Boolean);
+  const useCategoryOther = categoryId === '__other__';
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -166,15 +246,39 @@ export default function NewProductPage() {
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productPrice')} *</span></label>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              className="input input-bordered w-40"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-            />
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                className="input input-bordered w-32"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+              />
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  className="select select-bordered select-sm w-28"
+                  value={currencyOption}
+                  onChange={(e) => setCurrencyOption(e.target.value)}
+                >
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="OTHER">{t('currencyOther')}</option>
+                </select>
+                {currencyOption === 'OTHER' && (
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-24"
+                    placeholder="XXX"
+                    value={currencyCustom}
+                    onChange={(e) => setCurrencyCustom(e.target.value.slice(0, 10))}
+                    maxLength={10}
+                  />
+                )}
+              </div>
+            </div>
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productCategory')}</span></label>
@@ -187,20 +291,43 @@ export default function NewProductPage() {
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
+              <option value="__other__">{t('categoryOther')}</option>
             </select>
+            {useCategoryOther && (
+              <input
+                type="text"
+                className="input input-bordered w-full max-w-md mt-2"
+                placeholder={t('categoryOther')}
+                value={categoryOther}
+                onChange={(e) => setCategoryOther(e.target.value.slice(0, 100))}
+                maxLength={100}
+              />
+            )}
           </div>
 
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productImages')}</span></label>
             {imageUrls.map((url, i) => (
-              <div key={i} className="flex gap-2 items-center mb-2">
+              <div key={i} className="flex flex-wrap gap-2 items-center mb-2">
                 <input
                   type="url"
-                  className="input input-bordered flex-1 input-sm"
+                  className="input input-bordered flex-1 min-w-0 input-sm"
                   placeholder={`${t('addImageUrl')} ${i + 1}`}
                   value={url}
                   onChange={(e) => setImageUrl(i, e.target.value)}
                 />
+                <span className="text-sm opacity-70">{t('orChooseFile')}</span>
+                <input
+                  ref={(el) => { imageFileRefs.current[i] = el; }}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="file-input file-input-bordered file-input-sm max-w-[140px]"
+                  onChange={(e) => onImageFileChange(i, e)}
+                  disabled={!!uploadingIndex}
+                />
+                {uploadingIndex?.type === 'image' && uploadingIndex?.i === i && (
+                  <span className="text-sm opacity-70">{t('uploadInProgress')}</span>
+                )}
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMainImageIndex(i)} title={t('setAsMain')}>
                   {mainImageIndex === i ? '★' : '☆'}
                 </button>
@@ -220,14 +347,26 @@ export default function NewProductPage() {
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productVideos')}</span></label>
             {videoUrls.map((url, i) => (
-              <div key={i} className="flex gap-2 items-center mb-2">
+              <div key={i} className="flex flex-wrap gap-2 items-center mb-2">
                 <input
                   type="url"
-                  className="input input-bordered flex-1 input-sm"
+                  className="input input-bordered flex-1 min-w-0 input-sm"
                   placeholder={`${t('addVideoUrl')} ${i + 1}`}
                   value={url}
                   onChange={(e) => setVideoUrl(i, e.target.value)}
                 />
+                <span className="text-sm opacity-70">{t('orChooseVideo')}</span>
+                <input
+                  ref={(el) => { videoFileRefs.current[i] = el; }}
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  className="file-input file-input-bordered file-input-sm max-w-[140px]"
+                  onChange={(e) => onVideoFileChange(i, e)}
+                  disabled={!!uploadingIndex}
+                />
+                {uploadingIndex?.type === 'video' && uploadingIndex?.i === i && (
+                  <span className="text-sm opacity-70">{t('uploadInProgress')}</span>
+                )}
                 {videoUrls.length > 1 && (
                   <button type="button" className="btn btn-ghost btn-sm btn-error" onClick={() => removeVideo(i)}>×</button>
                 )}

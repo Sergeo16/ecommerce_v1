@@ -16,9 +16,10 @@ function CheckoutContent() {
   const { user, token } = useAuth();
   const { t } = useLocale();
   const productId = searchParams.get('productId');
-  const qty = Math.max(1, parseInt(searchParams.get('qty') ?? '1', 10));
+  const qtyFromUrl = Math.max(1, Math.min(999, parseInt(searchParams.get('qty') ?? '1', 10)));
 
   const [product, setProduct] = useState<ProductInfo | null>(null);
+  const [quantity, setQuantity] = useState(qtyFromUrl);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +31,9 @@ function CheckoutContent() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [phone, setPhone] = useState('');
+  const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!productId) {
@@ -44,11 +48,63 @@ function CheckoutContent() {
 
   const isGuest = !user;
 
+  const handleQuantityChange = (value: number) => {
+    const q = Math.max(1, Math.min(999, value));
+    setQuantity(q);
+  };
+
+  async function handleUseMyLocation() {
+    if (!navigator.geolocation) {
+      setLocationError(t('locationError'));
+      return;
+    }
+    setLocationError(null);
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setLocationCoords({ lat, lng });
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'AfricaMarketplace-Checkout/1.0' } }
+          );
+          const data = await res.json();
+          if (data?.address) {
+            const a = data.address;
+            const parts = [a.road, a.house_number, a.street, a.village, a.town, a.city, a.state].filter(Boolean);
+            setAddress(parts.slice(0, 3).join(', ') || data.display_name?.slice(0, 300) || '');
+            setCity([a.city, a.town, a.village, a.municipality, a.state].find(Boolean) || '');
+          }
+          setLocationError(null);
+        } catch {
+          setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          setLocationError(null);
+        }
+        setLocationLoading(false);
+      },
+      (err) => {
+        setLocationLoading(false);
+        setLocationError(err.code === 1 ? t('locationDenied') : t('locationError'));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!productId || !product) return;
-    const ship = { address: address.trim(), city: city.trim(), phone: phone.trim() || undefined };
+    const ship: Record<string, unknown> = {
+      address: address.trim(),
+      city: city.trim(),
+      phone: phone.trim() || undefined,
+    };
+    if (locationCoords) {
+      ship.lat = locationCoords.lat;
+      ship.lng = locationCoords.lng;
+    }
     if (!ship.address || !ship.city) {
       setError(t('addressCityRequired'));
       return;
@@ -65,7 +121,7 @@ function CheckoutContent() {
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const body: Record<string, unknown> = {
-        items: [{ productId, quantity: qty }],
+        items: [{ productId, quantity }],
         shippingAddress: ship,
       };
       if (isGuest) {
@@ -135,7 +191,7 @@ function CheckoutContent() {
     );
   }
 
-  const subtotal = product.price * qty;
+  const subtotal = product.price * quantity;
   const shippingAmount = 2000;
   const total = subtotal + shippingAmount;
 
@@ -155,7 +211,38 @@ function CheckoutContent() {
         <div className="card bg-base-100 shadow-xl mb-6">
           <div className="card-body p-4 sm:p-6">
             <p className="font-semibold break-words">{product.name}</p>
-            <p className="text-primary font-bold">{product.price.toLocaleString()} × {qty} = {subtotal.toLocaleString()} XOF</p>
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              <label className="flex items-center gap-2">
+                <span className="text-sm font-medium">{t('quantity')}:</span>
+                <div className="join">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline join-item"
+                    onClick={() => handleQuantityChange(quantity - 1)}
+                    aria-label="-"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    className="input input-bordered input-sm join-item w-16 text-center"
+                    value={quantity}
+                    onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline join-item"
+                    onClick={() => handleQuantityChange(quantity + 1)}
+                    aria-label="+"
+                  >
+                    +
+                  </button>
+                </div>
+              </label>
+            </div>
+            <p className="text-primary font-bold mt-2">{product.price.toLocaleString()} × {quantity} = {subtotal.toLocaleString()} XOF</p>
             <p className="text-sm opacity-80">+ {shippingAmount.toLocaleString()} XOF {t('shipping')}</p>
             <p className="font-bold">{t('total')}: {total.toLocaleString()} XOF</p>
           </div>
@@ -195,15 +282,39 @@ function CheckoutContent() {
               </>
             )}
             <h2 className="font-semibold text-lg mt-2">{t('shippingAddress')}</h2>
-            <input
-              type="text"
-              placeholder={t('address')}
-              className="input input-bordered w-full min-w-0"
-              value={address}
-              onChange={(e) => setAddress(e.target.value.slice(0, 300))}
-              required
-              maxLength={300}
-            />
+            <div className="flex flex-wrap gap-2 items-start">
+              <input
+                type="text"
+                placeholder={t('address')}
+                className="input input-bordered flex-1 min-w-0"
+                value={address}
+                onChange={(e) => setAddress(e.target.value.slice(0, 300))}
+                required
+                maxLength={300}
+              />
+              <button
+                type="button"
+                className="btn btn-outline btn-sm gap-1 shrink-0"
+                onClick={handleUseMyLocation}
+                disabled={locationLoading}
+                title={t('useMyLocation')}
+              >
+                {locationLoading ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <span aria-hidden>📍</span>
+                )}
+                <span className="hidden sm:inline">{t('useMyLocation')}</span>
+              </button>
+            </div>
+            {locationCoords && (
+              <p className="text-sm text-success flex items-center gap-1">
+                <span aria-hidden>✓</span> {t('locationSuccess')}: {locationCoords.lat.toFixed(5)}, {locationCoords.lng.toFixed(5)}
+              </p>
+            )}
+            {locationError && (
+              <p className="text-sm text-error">{locationError}</p>
+            )}
             <input
               type="text"
               placeholder={t('city')}
