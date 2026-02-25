@@ -8,6 +8,14 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 
+/** URL absolue pour les images (uploads /api/...) afin qu’elles s’affichent correctement. */
+function toAbsoluteImageUrl(url: string): string {
+  if (typeof window === 'undefined') return url;
+  if (!url || url.startsWith('http://') || url.startsWith('https://')) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${window.location.origin}${path}`;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -92,12 +100,13 @@ export default function CatalogPage() {
             {products.map((p) => {
               const mainIdx = (p as { mainImageIndex?: number }).mainImageIndex ?? 0;
               const img = p.imageUrls?.[mainIdx] ?? p.imageUrls?.[0];
+              const imgSrc = img ? toAbsoluteImageUrl(img) : '';
               return (
               <Link key={p.id} href={`/p/${p.slug}?id=${p.id}`}>
                 <div className="card bg-base-100 shadow hover:shadow-xl transition-shadow">
                   <figure className="h-40 bg-base-300">
-                    {img ? (
-                      <img src={img} alt={p.name} className="object-cover w-full h-full" />
+                    {imgSrc ? (
+                      <img src={imgSrc} alt={p.name} className="object-cover w-full h-full" />
                     ) : (
                       <span className="text-4xl opacity-50">📦</span>
                     )}

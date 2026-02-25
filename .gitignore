@@ -9,6 +9,9 @@ out
 dist
 build
 
+# Local uploads (fallback when S3 is not configured)
+.uploads
+
 # Env
 .env
 .env.local

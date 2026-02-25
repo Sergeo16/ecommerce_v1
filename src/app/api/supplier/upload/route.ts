@@ -1,12 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
 import { uploadFile } from '@/lib/s3';
 
 const PUBLISHER_ROLES = ['SUPPLIER', 'SUPER_ADMIN', 'AFFILIATE'] as const;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), '.uploads');
+
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || 'file';
+}
+
+/** Fallback : enregistrement local si S3 non configuré ou en erreur */
+async function uploadToLocal(
+  userId: string,
+  filename: string,
+  buffer: Buffer,
+  contentType: string
+): Promise<string> {
+  const dir = path.join(UPLOAD_DIR, userId);
+  await mkdir(dir, { recursive: true });
+  const safeName = `${Date.now()}-${filename}`;
+  const filePath = path.join(dir, safeName);
+  await writeFile(filePath, buffer);
+  return `/api/uploads/${userId}/${safeName}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -53,7 +72,13 @@ export async function POST(request: NextRequest) {
     const url = await uploadFile(key, buffer, contentType);
     return NextResponse.json({ url });
   } catch (err) {
-    console.error('Upload error:', err);
-    return NextResponse.json({ error: 'upload_failed' }, { status: 500 });
+    console.warn('S3 upload failed, using local fallback:', err);
+    try {
+      const url = await uploadToLocal(userId, filename, buffer, contentType);
+      return NextResponse.json({ url });
+    } catch (localErr) {
+      console.error('Local upload error:', localErr);
+      return NextResponse.json({ error: 'upload_failed' }, { status: 500 });
+    }
   }
 }

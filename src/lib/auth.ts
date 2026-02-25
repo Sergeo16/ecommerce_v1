@@ -33,8 +33,10 @@ export async function signAccessToken(payload: Omit<TokenPayload, 'iat' | 'exp'>
 }
 
 export async function signRefreshToken(userId: string): Promise<string> {
-  const token = await new jose.SignJWT({ sub: userId })
+  const jti = crypto.randomUUID();
+  const token = await new jose.SignJWT({ sub: userId, jti })
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(jti)
     .setExpirationTime(REFRESH_TTL)
     .sign(REFRESH_SECRET);
   await prisma.refreshToken.create({

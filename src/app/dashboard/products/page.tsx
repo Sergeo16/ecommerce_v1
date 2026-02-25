@@ -19,6 +19,60 @@ type Product = {
   category?: { name: string; slug: string };
 };
 
+function ProductCard({
+  product: p,
+  token,
+  t,
+  onDeleted,
+}: {
+  product: Product;
+  token: string | null;
+  t: (key: string) => string;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const mainIdx = p.mainImageIndex ?? 0;
+  const img = p.imageUrls?.[mainIdx] ?? p.imageUrls?.[0];
+  const imgSrc = img ? (typeof window !== 'undefined' ? (img.startsWith('http') ? img : `${window.location.origin}${img.startsWith('/') ? img : `/${img}`}`) : img) : '';
+
+  async function handleDelete() {
+    if (!confirm(t('confirmDeleteProduct'))) return;
+    if (!token) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/supplier/products/${p.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) onDeleted();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="card bg-base-100 shadow hover:shadow-lg transition-shadow">
+      <Link href={`/p/${p.slug}?id=${p.id}`} className="block">
+        <figure className="h-40 bg-base-300">
+          {imgSrc ? (
+            <img src={imgSrc} alt={p.name} className="object-cover w-full h-full" />
+          ) : (
+            <span className="text-4xl opacity-50">📦</span>
+          )}
+        </figure>
+      </Link>
+      <div className="card-body p-4">
+        <h2 className="card-title text-sm line-clamp-2">{p.name}</h2>
+        <p className="text-primary font-bold">{p.price?.toLocaleString()} {p.currency ?? 'XOF'}</p>
+        <div className="card-actions justify-end gap-1 mt-2">
+          <Link href={`/p/${p.slug}?id=${p.id}`} className="btn btn-ghost btn-sm">{t('viewProduct')}</Link>
+          <Link href={`/dashboard/products/${p.id}/edit`} className="btn btn-outline btn-sm">{t('editProduct')}</Link>
+          <button type="button" className="btn btn-error btn-sm" onClick={handleDelete} disabled={deleting}>
+            {deleting ? '...' : t('deleteProduct')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MyProductsPage() {
   const { user, token } = useAuth();
   const { t } = useLocale();
@@ -75,27 +129,15 @@ export default function MyProductsPage() {
           <p className="opacity-70">Aucun produit. <Link href="/dashboard/products/new" className="link">{t('publishProduct')}</Link></p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((p) => {
-              const mainIdx = p.mainImageIndex ?? 0;
-              const img = p.imageUrls?.[mainIdx] ?? p.imageUrls?.[0];
-              return (
-                <Link key={p.id} href={`/p/${p.slug}?id=${p.id}`}>
-                  <div className="card bg-base-100 shadow hover:shadow-lg transition-shadow">
-                    <figure className="h-40 bg-base-300">
-                      {img ? (
-                        <img src={img} alt={p.name} className="object-cover w-full h-full" />
-                      ) : (
-                        <span className="text-4xl opacity-50">📦</span>
-                      )}
-                    </figure>
-                    <div className="card-body p-4">
-                      <h2 className="card-title text-sm line-clamp-2">{p.name}</h2>
-                      <p className="text-primary font-bold">{p.price?.toLocaleString()} {p.currency ?? 'XOF'}</p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+            {products.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                token={token}
+                t={t}
+                onDeleted={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}
+              />
+            ))}
           </div>
         )}
       </main>

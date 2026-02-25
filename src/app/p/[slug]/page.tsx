@@ -1,12 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+
+/** URL absolue pour les images (uploads /api/...) afin qu’elles s’affichent correctement. */
+function toAbsoluteImageUrl(url: string): string {
+  if (typeof window === 'undefined') return url;
+  if (!url || url.startsWith('http://') || url.startsWith('https://')) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${window.location.origin}${path}`;
+}
+
+/** Extrait l’ID vidéo YouTube d’une URL (youtube.com/watch?v=ID ou youtu.be/ID). */
+function getYoutubeVideoId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') {
+      return u.searchParams.get('v') || null;
+    }
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 type Product = {
   id: string;
@@ -47,13 +70,16 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
     }
   }, [product?.id, product?.imageUrls, product?.mainImageIndex]);
 
+  const images = product?.imageUrls ?? [];
+  const imageUrlsAbs = useMemo(() => images.map((u) => toAbsoluteImageUrl(u)), [images]);
+
   if (!product) return <div className="p-8 text-center">{t('loading')}</div>;
 
-  const images = product.imageUrls ?? [];
   const videos = product.videoUrls ?? [];
   const mainIndex = product.mainImageIndex ?? 0;
   const displayIndex = selectedImageIndex >= 0 && selectedImageIndex < images.length ? selectedImageIndex : mainIndex;
   const mainImageUrl = images[displayIndex] ?? images[0];
+  const mainImageUrlAbs = mainImageUrl ? toAbsoluteImageUrl(mainImageUrl) : '';
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -72,9 +98,9 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
           {/* Galerie : image principale + miniatures */}
           <div className="space-y-3">
             <figure className="bg-base-300 rounded-lg aspect-square max-h-[400px] flex items-center justify-center overflow-hidden">
-              {mainImageUrl ? (
+              {mainImageUrlAbs ? (
                 <img
-                  src={mainImageUrl}
+                  src={mainImageUrlAbs}
                   alt={product.name}
                   className="object-contain w-full h-full"
                 />
@@ -93,20 +119,38 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                     }`}
                     onClick={() => setSelectedImageIndex(i)}
                   >
-                    <img src={url} alt="" className="object-cover w-full h-full" />
+                    <img src={imageUrlsAbs[i] ?? url} alt="" className="object-cover w-full h-full" />
                   </button>
                 ))}
               </div>
             )}
-            {/* Vidéos (tout utilisateur peut voir) */}
+            {/* Vidéos : YouTube en iframe, sinon lecteur vidéo direct */}
             {videos.length > 0 && (
               <div className="space-y-4 pt-4 border-t border-base-300">
                 <h3 className="font-semibold">Vidéos</h3>
-                {videos.map((url, i) => (
-                  <div key={i} className="rounded-lg overflow-hidden bg-base-300 aspect-video max-h-64">
-                    <video src={url} controls className="w-full h-full object-contain" />
-                  </div>
-                ))}
+                {videos.map((url, i) => {
+                  const ytId = getYoutubeVideoId(url);
+                  if (ytId) {
+                    const embedUrl = `https://www.youtube.com/embed/${ytId}`;
+                    return (
+                      <div key={i} className="rounded-lg overflow-hidden bg-base-300 aspect-video max-h-64">
+                        <iframe
+                          src={embedUrl}
+                          title={`Vidéo ${i + 1}`}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    );
+                  }
+                  const directUrl = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
+                  return (
+                    <div key={i} className="rounded-lg overflow-hidden bg-base-300 aspect-video max-h-64">
+                      <video src={directUrl} controls className="w-full h-full object-contain" />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

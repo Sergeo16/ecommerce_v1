@@ -17,7 +17,8 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  refreshUser: () => Promise<void>;
+  /** Rafraîchit la session ; retourne le nouvel access token ou null si échec */
+  refreshUser: () => Promise<string | null>;
   isLoading: boolean;
 }
 
@@ -26,18 +27,28 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = 'access_token';
 const REFRESH_KEY = 'refresh_token';
 
+async function parseResJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text?.trim()) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<string | null> => {
     const refresh = typeof window !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null;
     if (!refresh) {
       setUser(null);
       setToken(null);
       setIsLoading(false);
-      return;
+      return null;
     }
     try {
       const res = await fetch('/api/auth/refresh', {
@@ -51,18 +62,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setToken(null);
         setIsLoading(false);
-        return;
+        return null;
       }
-      const data = await res.json();
-      setToken(data.accessToken);
+      const data = await parseResJson(res);
+      const newToken = (data.accessToken as string) ?? null;
+      setToken(newToken);
       setUser(data.user);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(TOKEN_KEY, data.accessToken);
-        localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      if (typeof window !== 'undefined' && newToken) {
+        localStorage.setItem(TOKEN_KEY, newToken);
+        const refresh = data.refreshToken as string | undefined;
+        if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
       }
+      return newToken;
     } catch {
       setUser(null);
       setToken(null);
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -84,16 +99,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
+    const data = await parseResJson(res);
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? 'Connexion échouée');
+      throw new Error((data.error as string) ?? (data.message as string) ?? 'Connexion échouée');
     }
-    const data = await res.json();
-    setToken(data.accessToken);
-    setUser(data.user);
+    setToken(data.accessToken as string);
+    setUser(data.user as User);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(TOKEN_KEY, data.accessToken);
-      localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      localStorage.setItem(TOKEN_KEY, data.accessToken as string);
+      localStorage.setItem(REFRESH_KEY, (data.refreshToken as string) ?? '');
     }
   };
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -11,15 +11,11 @@ import { useLocale } from '@/context/LocaleContext';
 
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
-
 const CURRENCY_OPTIONS = ['XOF', 'EUR', 'USD', 'XAF', 'CFA', 'GBP', 'CHF'] as const;
-
 const ALLOWED_NAME = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
-// Description : tout sauf < > \ (évite injection HTML/script). Autorise %, €, $, « », etc.
 const ALLOWED_DESCRIPTION = /^[^<>\\]*$/u;
 const ALLOWED_CATEGORY = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
 
-/** Icône trombone (pièce jointe) pour le choix de fichier */
 function PaperclipIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -28,10 +24,9 @@ function PaperclipIcon({ className }: { className?: string }) {
   );
 }
 
-/** Évite "Unexpected end of JSON input" quand la réponse est vide ou non-JSON */
 async function parseResJson(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
-  if (!text || !text.trim()) return {};
+  if (!text?.trim()) return {};
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
@@ -39,11 +34,14 @@ async function parseResJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-export default function NewProductPage() {
+export default function EditProductPage() {
+  const params = useParams();
+  const id = params?.id as string | undefined;
   const { user, token, refreshUser } = useAuth();
   const { t } = useLocale();
   const router = useRouter();
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const [loadProduct, setLoadProduct] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [uploadingIndex, setUploadingIndex] = useState<{ type: 'image' | 'video'; i: number } | null>(null);
@@ -65,30 +63,43 @@ export default function NewProductPage() {
   const canPublish = user?.role === 'SUPPLIER' || user?.role === 'SUPER_ADMIN' || user?.role === 'AFFILIATE';
 
   useEffect(() => {
-    fetch('/api/categories')
-      .then((r) => r.json())
-      .then((list) => setCategories(Array.isArray(list) ? list : []));
+    fetch('/api/categories').then((r) => r.json()).then((list) => setCategories(Array.isArray(list) ? list : []));
   }, []);
 
-  // Devise par défaut : celle du wallet utilisateur (quand il change de compte ou de préférence)
   useEffect(() => {
-    if (!token) return;
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.ok ? r.json() : null)
-      .then((me) => {
-        const walletCurrency = (me?.wallet as { currency?: string } | undefined)?.currency;
-        if (walletCurrency && typeof walletCurrency === 'string') {
-          const c = walletCurrency.trim().toUpperCase().slice(0, 10);
-          if (CURRENCY_OPTIONS.includes(c as (typeof CURRENCY_OPTIONS)[number])) {
-            setCurrencyOption(c);
-          } else if (c) {
-            setCurrencyOption('OTHER');
-            setCurrencyCustom(c);
-          }
+    if (!id || !token || !canPublish) return;
+    fetch(`/api/supplier/products/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p: Record<string, unknown> | null) => {
+        if (!p) {
+          setError('Produit introuvable.');
+          setLoadProduct(false);
+          return;
         }
+        setName(String(p.name ?? ''));
+        setDescription(String(p.description ?? ''));
+        setPrice(Number(p.price)?.toString() ?? '');
+        const cur = String(p.currency ?? 'XOF').trim().toUpperCase();
+        if (CURRENCY_OPTIONS.includes(cur as (typeof CURRENCY_OPTIONS)[number])) {
+          setCurrencyOption(cur);
+        } else if (cur) {
+          setCurrencyOption('OTHER');
+          setCurrencyCustom(cur);
+        }
+        setCategoryId((p.categoryId as string) ?? (p.category as { id?: string })?.id ?? '');
+        setCategoryOther('');
+        const imgs = Array.isArray(p.imageUrls) ? (p.imageUrls as string[]) : [];
+        setImageUrls(imgs.length ? imgs : ['']);
+        setMainImageIndex(Math.max(0, Math.min(Number(p.mainImageIndex) ?? 0, imgs.length - 1)));
+        const vids = Array.isArray(p.videoUrls) ? (p.videoUrls as string[]) : [];
+        setVideoUrls(vids.length ? vids : ['']);
+        setLoadProduct(false);
       })
-      .catch(() => {});
-  }, [token]);
+      .catch(() => {
+        setError('Erreur au chargement.');
+        setLoadProduct(false);
+      });
+  }, [id, token, canPublish]);
 
   function addImage() {
     if (imageUrls.length >= MAX_IMAGES) return;
@@ -106,7 +117,6 @@ export default function NewProductPage() {
       return next;
     });
   }
-
   function addVideo() {
     if (videoUrls.length >= MAX_VIDEOS) return;
     setVideoUrls((prev) => [...prev, '']);
@@ -135,16 +145,7 @@ export default function NewProductPage() {
         body: formData,
       });
       const data = await parseResJson(res);
-      if (!res.ok) {
-        const msg =
-          data.error === 'image_too_large' ? t('uploadErrorImageTooLarge')
-          : data.error === 'video_too_large' ? t('uploadErrorVideoTooLarge')
-          : data.error === 'invalid_image_type' ? t('uploadErrorInvalidImageType')
-          : data.error === 'invalid_video_type' ? t('uploadErrorInvalidVideoType')
-          : data.error === 'upload_failed' ? t('uploadFailed')
-          : (data.error ?? t('uploadFailed'));
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error((data.error as string) ?? t('uploadFailed'));
       if (type === 'image') setImageUrl(index, (data.url as string) ?? '');
       else setVideoUrl(index, (data.url as string) ?? '');
     } catch (err) {
@@ -153,7 +154,6 @@ export default function NewProductPage() {
       setUploadingIndex(null);
     }
   }
-
   function onImageFileChange(i: number, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file, 'image', i);
@@ -173,11 +173,9 @@ export default function NewProductPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
     const nameTrim = name.trim();
     const descTrim = description.trim();
     const categoryNameTrim = categoryOther.trim();
-
     if (!nameTrim) {
       setError(t('nameRequired'));
       return;
@@ -194,17 +192,14 @@ export default function NewProductPage() {
       setError(t('invalidCharactersCategory'));
       return;
     }
-
     const priceNum = parseFloat(price);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
       setError(t('invalidPrice'));
       return;
     }
-
     const images = imageUrls.map((u) => u.trim()).filter(Boolean);
     const videos = videoUrls.map((u) => u.trim()).filter(Boolean);
     const mainIdx = Math.min(mainImageIndex, Math.max(0, images.length - 1));
-
     if (images.length === 0) {
       setError(t('atLeastOneImage'));
       return;
@@ -216,31 +211,31 @@ export default function NewProductPage() {
       description: descTrim || null,
       price: priceNum,
       currency: getCurrency(),
-      categoryId: (categoryId && categoryId !== '__other__') ? categoryId : null,
-      categoryName: useCategoryOther ? categoryNameTrim || undefined : undefined,
+      categoryId: categoryId && categoryId !== '__other__' ? categoryId : null,
+      categoryName: categoryId === '__other__' ? categoryNameTrim || undefined : undefined,
       imageUrls: images,
       mainImageIndex: mainIdx,
       videoUrls: videos,
     };
 
-    async function doSubmit(accessToken: string | null) {
+    async function doPatch(accessToken: string | null) {
       if (!accessToken) throw new Error(t('sessionExpired'));
-      const res = await fetch('/api/supplier/products', {
-        method: 'POST',
+      const res = await fetch(`/api/supplier/products/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify(payload),
       });
       const data = await parseResJson(res);
-      if (res.status === 401) return null; // token invalide ou expiré → tenter refresh
+      if (res.status === 401) return null;
       if (!res.ok) throw new Error((data.error as string) ?? 'Erreur');
       return true;
     }
 
     try {
-      let ok = await doSubmit(token);
+      let ok = await doPatch(token);
       if (ok === null) {
         const newToken = await refreshUser();
-        ok = await doSubmit(newToken);
+        ok = await doPatch(newToken);
       }
       if (ok) {
         router.push('/dashboard/products');
@@ -266,21 +261,29 @@ export default function NewProductPage() {
   if (!canPublish) {
     return (
       <div className="p-8">
-        <p>Seuls les fournisseurs, affiliés et administrateurs peuvent publier des produits.</p>
-        <Link href="/dashboard" className="btn btn-ghost mt-4">{t('back')}</Link>
+        <p>Accès réservé aux fournisseurs et administrateurs.</p>
+        <Link href="/dashboard/products" className="btn btn-ghost mt-4">{t('back')}</Link>
       </div>
     );
   }
 
-  const imagesFiltered = imageUrls.map((u) => u.trim()).filter(Boolean);
+  if (loadProduct) {
+    return (
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <span className="loading loading-spinner" />
+      </div>
+    );
+  }
+
   const useCategoryOther = categoryId === '__other__';
+  const imagesFiltered = imageUrls.map((u) => u.trim()).filter(Boolean);
 
   return (
     <div className="min-h-screen bg-base-200">
       <header className="navbar bg-base-100 shadow px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
         <div className="navbar-start shrink-0 min-w-0 max-w-[80%] flex-nowrap gap-1">
           <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[120px] sm:max-w-none" />
-          <Link href="/dashboard" className="btn btn-ghost btn-sm whitespace-nowrap shrink-0">← {t('dashboard')}</Link>
+          <Link href="/dashboard/products" className="btn btn-ghost btn-sm whitespace-nowrap shrink-0">← {t('myProducts')}</Link>
         </div>
         <div className="navbar-end shrink-0 flex-nowrap gap-1">
           <ThemeSwitcher />
@@ -288,174 +291,72 @@ export default function NewProductPage() {
         </div>
       </header>
       <main className="container mx-auto p-4 sm:p-6 max-w-2xl">
-        <h1 className="text-2xl font-bold mb-6">{t('publishProduct')}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('editProductTitle')}</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && <div className="alert alert-error text-sm">{error}</div>}
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productName')} *</span></label>
-            <input
-              type="text"
-              className="input input-bordered w-full"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={255}
-            />
+            <input type="text" className="input input-bordered w-full" value={name} onChange={(e) => setName(e.target.value)} required maxLength={255} />
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productDescription')}</span></label>
-            <textarea
-              className="textarea textarea-bordered w-full min-h-24"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={5000}
-              placeholder=""
-            />
+            <textarea className="textarea textarea-bordered w-full min-h-24" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder="" />
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productPriceWithCurrency').replace('{currency}', getCurrency())} *</span></label>
             <div className="flex flex-wrap gap-2 items-center">
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                className="input input-bordered w-32"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                required
-              />
-              <div className="flex flex-wrap gap-2 items-center">
-                <select
-                  className="select select-bordered select-sm w-28"
-                  value={currencyOption}
-                  onChange={(e) => setCurrencyOption(e.target.value)}
-                >
-                  {CURRENCY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                  <option value="OTHER">{t('currencyOther')}</option>
-                </select>
-                {currencyOption === 'OTHER' && (
-                  <input
-                    type="text"
-                    className="input input-bordered input-sm w-24"
-                    placeholder="XXX"
-                    value={currencyCustom}
-                    onChange={(e) => setCurrencyCustom(e.target.value.slice(0, 10))}
-                    maxLength={10}
-                  />
-                )}
-              </div>
+              <input type="number" min={0} step={0.01} className="input input-bordered w-32" value={price} onChange={(e) => setPrice(e.target.value)} required />
+              <select className="select select-bordered select-sm w-28" value={currencyOption} onChange={(e) => setCurrencyOption(e.target.value)}>
+                {CURRENCY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="OTHER">{t('currencyOther')}</option>
+              </select>
+              {currencyOption === 'OTHER' && (
+                <input type="text" className="input input-bordered input-sm w-24" placeholder="XXX" value={currencyCustom} onChange={(e) => setCurrencyCustom(e.target.value.slice(0, 10))} maxLength={10} />
+              )}
             </div>
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productCategory')}</span></label>
-            <select
-              className="select select-bordered w-full max-w-md"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
+            <select className="select select-bordered w-full max-w-md" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">—</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               <option value="__other__">{t('categoryOther')}</option>
             </select>
             {useCategoryOther && (
-              <input
-                type="text"
-                className="input input-bordered w-full max-w-md mt-2"
-                placeholder={t('categoryOther')}
-                value={categoryOther}
-                onChange={(e) => setCategoryOther(e.target.value.slice(0, 100))}
-                maxLength={100}
-              />
+              <input type="text" className="input input-bordered w-full max-w-md mt-2" placeholder={t('categoryOther')} value={categoryOther} onChange={(e) => setCategoryOther(e.target.value.slice(0, 100))} maxLength={100} />
             )}
           </div>
-
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productImages')}</span></label>
             {imageUrls.map((url, i) => (
               <div key={i} className="flex flex-wrap gap-2 items-center mb-2">
-                <input
-                  type="text"
-                  className="input input-bordered flex-1 min-w-0 input-sm"
-                  placeholder={`${t('addImageUrl')} ${i + 1}`}
-                  value={url}
-                  onChange={(e) => setImageUrl(i, e.target.value)}
-                />
-                <label htmlFor={`image-file-${i}`} className="btn btn-ghost btn-sm btn-square shrink-0" title={t('orChooseFile')}>
-                  <PaperclipIcon />
-                </label>
-                <input
-                  id={`image-file-${i}`}
-                  ref={(el) => { imageFileRefs.current[i] = el; }}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  className="hidden"
-                  onChange={(e) => onImageFileChange(i, e)}
-                  disabled={!!uploadingIndex}
-                />
-                {uploadingIndex?.type === 'image' && uploadingIndex?.i === i && (
-                  <span className="text-sm opacity-70">{t('uploadInProgress')}</span>
-                )}
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMainImageIndex(i)} title={t('setAsMain')}>
-                  {mainImageIndex === i ? '★' : '☆'}
-                </button>
-                {imageUrls.length > 1 && (
-                  <button type="button" className="btn btn-ghost btn-sm btn-error" onClick={() => removeImage(i)}>×</button>
-                )}
+                <input type="text" className="input input-bordered flex-1 min-w-0 input-sm" placeholder={`${t('addImageUrl')} ${i + 1}`} value={url} onChange={(e) => setImageUrl(i, e.target.value)} />
+                <label htmlFor={`edit-image-file-${i}`} className="btn btn-ghost btn-sm btn-square shrink-0" title={t('orChooseFile')}><PaperclipIcon /></label>
+                <input id={`edit-image-file-${i}`} ref={(el) => { imageFileRefs.current[i] = el; }} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={(e) => onImageFileChange(i, e)} disabled={!!uploadingIndex} />
+                {uploadingIndex?.type === 'image' && uploadingIndex?.i === i && <span className="text-sm opacity-70">{t('uploadInProgress')}</span>}
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMainImageIndex(i)} title={t('setAsMain')}>{mainImageIndex === i ? '★' : '☆'}</button>
+                {imageUrls.length > 1 && <button type="button" className="btn btn-ghost btn-sm btn-error" onClick={() => removeImage(i)}>×</button>}
               </div>
             ))}
-            {imageUrls.length < MAX_IMAGES && (
-              <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={addImage}>+ {t('addImageUrl')}</button>
-            )}
-            {imagesFiltered.length > 0 && (
-              <p className="text-xs opacity-70 mt-1">{t('mainImage')}: image #{mainImageIndex + 1}</p>
-            )}
+            {imageUrls.length < MAX_IMAGES && <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={addImage}>+ {t('addImageUrl')}</button>}
+            {imagesFiltered.length > 0 && <p className="text-xs opacity-70 mt-1">{t('mainImage')}: image #{mainImageIndex + 1}</p>}
           </div>
-
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productVideos')}</span></label>
             {videoUrls.map((url, i) => (
               <div key={i} className="flex flex-wrap gap-2 items-center mb-2">
-                <input
-                  type="text"
-                  className="input input-bordered flex-1 min-w-0 input-sm"
-                  placeholder={`${t('addVideoUrl')} ${i + 1}`}
-                  value={url}
-                  onChange={(e) => setVideoUrl(i, e.target.value)}
-                />
-                <label htmlFor={`video-file-${i}`} className="btn btn-ghost btn-sm btn-square shrink-0" title={t('orChooseVideo')}>
-                  <PaperclipIcon />
-                </label>
-                <input
-                  id={`video-file-${i}`}
-                  ref={(el) => { videoFileRefs.current[i] = el; }}
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime"
-                  className="hidden"
-                  onChange={(e) => onVideoFileChange(i, e)}
-                  disabled={!!uploadingIndex}
-                />
-                {uploadingIndex?.type === 'video' && uploadingIndex?.i === i && (
-                  <span className="text-sm opacity-70">{t('uploadInProgress')}</span>
-                )}
-                {videoUrls.length > 1 && (
-                  <button type="button" className="btn btn-ghost btn-sm btn-error" onClick={() => removeVideo(i)}>×</button>
-                )}
+                <input type="text" className="input input-bordered flex-1 min-w-0 input-sm" placeholder={`${t('addVideoUrl')} ${i + 1}`} value={url} onChange={(e) => setVideoUrl(i, e.target.value)} />
+                <label htmlFor={`edit-video-file-${i}`} className="btn btn-ghost btn-sm btn-square shrink-0" title={t('orChooseVideo')}><PaperclipIcon /></label>
+                <input id={`edit-video-file-${i}`} ref={(el) => { videoFileRefs.current[i] = el; }} type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => onVideoFileChange(i, e)} disabled={!!uploadingIndex} />
+                {uploadingIndex?.type === 'video' && uploadingIndex?.i === i && <span className="text-sm opacity-70">{t('uploadInProgress')}</span>}
+                {videoUrls.length > 1 && <button type="button" className="btn btn-ghost btn-sm btn-error" onClick={() => removeVideo(i)}>×</button>}
               </div>
             ))}
-            {videoUrls.length < MAX_VIDEOS && (
-              <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={addVideo}>+ {t('addVideoUrl')}</button>
-            )}
+            {videoUrls.length < MAX_VIDEOS && <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={addVideo}>+ {t('addVideoUrl')}</button>}
           </div>
-
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? '...' : t('save')}
-            </button>
-            <Link href="/dashboard" className="btn btn-ghost">{t('back')}</Link>
+            <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? '...' : t('save')}</button>
+            <Link href="/dashboard/products" className="btn btn-ghost">{t('back')}</Link>
           </div>
         </form>
       </main>
