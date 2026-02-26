@@ -1,31 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { uploadFile } from '@/lib/s3';
+import { normalizeImageBuffer } from '@/lib/media-normalize';
+import { uploadBuffer } from '@/lib/upload-buffer';
 
 const PUBLISHER_ROLES = ['SUPPLIER', 'SUPER_ADMIN', 'AFFILIATE'] as const;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), '.uploads');
-
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || 'file';
-}
-
-/** Fallback : enregistrement local si S3 non configuré ou en erreur */
-async function uploadToLocal(
-  userId: string,
-  filename: string,
-  buffer: Buffer,
-  contentType: string
-): Promise<string> {
-  const dir = path.join(UPLOAD_DIR, userId);
-  await mkdir(dir, { recursive: true });
-  const safeName = `${Date.now()}-${filename}`;
-  const filePath = path.join(dir, safeName);
-  await writeFile(filePath, buffer);
-  return `/api/uploads/${userId}/${safeName}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -64,21 +46,29 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const filename = sanitizeFilename(file.name);
-  const key = `uploads/${userId}/${Date.now()}-${filename}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const rawBuffer = Buffer.from(await file.arrayBuffer());
+  let buffer = rawBuffer;
+  let finalContentType = contentType;
+  let finalFilename = sanitizeFilename(file.name);
+
+  if (type === 'image') {
+    try {
+      const normalized = await normalizeImageBuffer(rawBuffer, contentType);
+      buffer = normalized.buffer;
+      finalContentType = normalized.contentType;
+      const base = file.name.replace(/\.[^.]+$/i, '') || 'image';
+      finalFilename = sanitizeFilename(base) + normalized.ext;
+    } catch (err) {
+      console.error('Image normalization failed:', err);
+      return NextResponse.json({ error: 'invalid_image_type' }, { status: 400 });
+    }
+  }
 
   try {
-    const url = await uploadFile(key, buffer, contentType);
+    const url = await uploadBuffer(userId, buffer, finalContentType, finalFilename);
     return NextResponse.json({ url });
   } catch (err) {
-    console.warn('S3 upload failed, using local fallback:', err);
-    try {
-      const url = await uploadToLocal(userId, filename, buffer, contentType);
-      return NextResponse.json({ url });
-    } catch (localErr) {
-      console.error('Local upload error:', localErr);
-      return NextResponse.json({ error: 'upload_failed' }, { status: 500 });
-    }
+    console.error('Upload error:', err);
+    return NextResponse.json({ error: 'upload_failed' }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { normalizeProductMedia } from '@/lib/normalize-product-media';
 
 const PUBLISHER_ROLES = ['SUPPLIER', 'SUPER_ADMIN', 'AFFILIATE'] as const;
 
@@ -85,13 +86,17 @@ export async function POST(request: NextRequest) {
     categoryId = cat.id;
   }
 
-  let imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
-  let videoUrls = Array.isArray(body.videoUrls) ? body.videoUrls.filter((u: unknown) => typeof u === 'string' && u.trim()) : [];
+  let imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((u: unknown) => typeof u === 'string' && (u as string).trim()) : [];
+  let videoUrls = Array.isArray(body.videoUrls) ? body.videoUrls.filter((u: unknown) => typeof u === 'string' && (u as string).trim()) : [];
   let mainImageIndex = typeof body.mainImageIndex === 'number' ? Math.max(0, Math.min(body.mainImageIndex, imageUrls.length - 1)) : 0;
 
   if (imageUrls.length > MAX_IMAGES) imageUrls = imageUrls.slice(0, MAX_IMAGES);
   if (videoUrls.length > MAX_VIDEOS) videoUrls = videoUrls.slice(0, MAX_VIDEOS);
   if (mainImageIndex >= imageUrls.length) mainImageIndex = 0;
+
+  const normalized = await normalizeProductMedia(userId, imageUrls, videoUrls);
+  imageUrls = normalized.imageUrls;
+  videoUrls = normalized.videoUrls;
 
   if (!name || !Number.isFinite(price)) {
     return NextResponse.json({ error: 'name et price requis' }, { status: 400 });
