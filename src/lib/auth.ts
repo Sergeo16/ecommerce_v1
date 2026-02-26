@@ -10,7 +10,8 @@ import { verifyAccessToken as verifyJwt, type TokenPayload } from './jwt';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? 'change-me-in-production');
 const REFRESH_SECRET = new TextEncoder().encode(process.env.REFRESH_SECRET ?? 'refresh-change-me');
-const ACCESS_TTL = '15m';
+/** Durée de vie de l’access token (alignée sur la session : déconnexion uniquement au clic sur « Déconnexion »). */
+const ACCESS_TTL = '7d';
 const REFRESH_TTL = '7d';
 
 export async function hashPassword(password: string): Promise<string> {

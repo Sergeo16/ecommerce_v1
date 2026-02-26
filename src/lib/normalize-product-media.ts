@@ -5,11 +5,26 @@
  */
 import {
   isExternalMediaUrl,
+  resolveImageUrl,
   fetchImageBuffer,
   fetchVideoBuffer,
   normalizeImageBuffer,
 } from '@/lib/media-normalize';
 import { uploadBuffer } from '@/lib/upload-buffer';
+
+/** URLs de vidéos à garder telles quelles (embed iframe), pas de téléchargement. */
+function isEmbedOnlyVideoUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  try {
+    const parsed = new URL(u);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host === 'youtube.com' || host === 'youtu.be') return true;
+    if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 const ALLOWED_VIDEO_TYPES: Record<string, string> = {
   'video/mp4': '.mp4',
@@ -37,8 +52,9 @@ export async function normalizeImageUrls(
       continue;
     }
 
+    const fetchUrl = resolveImageUrl(u);
     try {
-      const buffer = await fetchImageBuffer(u);
+      const buffer = await fetchImageBuffer(fetchUrl);
       const normalized = await normalizeImageBuffer(buffer);
       const filename = `img-${Date.now()}-${result.length}${normalized.ext}`;
       const newUrl = await uploadBuffer(
@@ -73,6 +89,11 @@ export async function normalizeVideoUrls(
     if (!u) continue;
 
     if (!isExternalMediaUrl(u)) {
+      result.push(u);
+      continue;
+    }
+
+    if (isEmbedOnlyVideoUrl(u)) {
       result.push(u);
       continue;
     }

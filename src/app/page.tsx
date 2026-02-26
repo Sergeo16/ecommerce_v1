@@ -25,7 +25,7 @@ export default function HomePage() {
 
             {/* Centre : lien Catalogue (caché sur mobile, dans le menu) */}
             <nav className="navbar-center flex-1 justify-center hidden md:flex flex-nowrap min-w-0" aria-label="Navigation principale">
-              <Link href="/catalog" className="link link-hover font-medium opacity-90 hover:opacity-100 whitespace-nowrap">
+              <Link href="/catalog" className="link link-hover font-medium text-base-content opacity-90 hover:opacity-100 whitespace-nowrap">
                 {t('catalog')}
               </Link>
             </nav>
@@ -73,15 +73,15 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeMenu} aria-hidden />
           <div className="relative bg-base-100 rounded-2xl shadow-2xl w-full max-w-sm py-4 overflow-y-auto max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center px-4 pb-3 border-b border-base-300">
-              <span className="font-semibold text-lg">Menu</span>
+              <span className="font-semibold text-lg text-base-content">Menu</span>
               <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={closeMenu} aria-label="Fermer">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <nav className="flex flex-col py-2">
-              <Link href="/catalog" className="px-4 py-3 hover:bg-base-200 text-left font-medium" onClick={closeMenu}>{t('catalog')}</Link>
-              <Link href="/auth/login" className="px-4 py-3 hover:bg-base-200 text-left font-medium" onClick={closeMenu}>{t('login')}</Link>
-              <Link href="/auth/register" className="px-4 py-3 hover:bg-base-200 text-left font-medium" onClick={closeMenu}>{t('register')}</Link>
+              <Link href="/catalog" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('catalog')}</Link>
+              <Link href="/auth/login" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('login')}</Link>
+              <Link href="/auth/register" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('register')}</Link>
               <div className="border-t border-base-300 my-2" />
               <div className="px-4 py-3 flex items-center gap-2">
                 <ThemeSwitcher />
@@ -104,18 +104,47 @@ export default function HomePage() {
           <h1 id="hero-title" className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-5 sm:mb-6 tracking-tight break-words text-base-content">
             {t('heroTitle')}
           </h1>
-          <p className="text-base sm:text-lg md:text-xl opacity-85 mb-10 sm:mb-12 max-w-2xl mx-auto break-words whitespace-pre-line leading-relaxed">
-            {t('heroSubtitle')}
+          <p className="text-base sm:text-lg text-base-content/80 mb-8 sm:mb-10">
+            {t('heroLead')}
           </p>
+
+          {/* 4 rôles en cartes : clients, vendeurs, affiliés, livreurs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 max-w-4xl mx-auto mb-10 sm:mb-12">
+            {[
+              { emoji: '🛍️', roleKey: 'heroRoleClient', descKey: 'heroClient' },
+              { emoji: '🏪', roleKey: 'heroRoleSeller', descKey: 'heroSeller' },
+              { emoji: '🤝', roleKey: 'heroRoleAffiliate', descKey: 'heroAffiliate' },
+              { emoji: '🚚', roleKey: 'heroRoleCourier', descKey: 'heroCourier' },
+            ].map((item) => (
+              <div
+                key={item.roleKey}
+                className="group relative bg-base-200/70 hover:bg-base-200 border border-base-300/60 hover:border-primary/30 rounded-2xl p-4 sm:p-5 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+              >
+                <span className="text-2xl sm:text-3xl block mb-2" aria-hidden>
+                  {item.emoji}
+                </span>
+                <h3 className="font-semibold text-base sm:text-lg text-base-content mb-1">
+                  {t(item.roleKey as keyof typeof t)}
+                </h3>
+                <p className="text-sm text-base-content/85 leading-snug">
+                  {t(item.descKey as keyof typeof t)}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mb-10 sm:mb-12">
+            <p className="text-sm sm:text-base text-base-content/80 max-w-xl mx-auto leading-relaxed">
+              « {t('heroTagline')} »
+            </p>
+          </div>
+
           <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4">
             <Link href="/catalog" className="btn btn-primary btn-lg shadow-lg w-full sm:w-auto min-w-[200px]">
               {t('seeCatalog')}
             </Link>
-            <Link href="/auth/register?role=affiliate" className="btn btn-outline btn-lg w-full sm:w-auto min-w-[200px]">
-              {t('becomeAffiliate')}
-            </Link>
-            <Link href="/auth/register?role=supplier" className="btn btn-outline btn-lg w-full sm:w-auto min-w-[200px]">
-              {t('becomeSupplier')}
+            <Link href="/auth/register" className="btn btn-outline btn-lg w-full sm:w-auto min-w-[200px]">
+              {t('becomePartner')}
             </Link>
           </div>
         </section>
@@ -131,7 +160,7 @@ export default function HomePage() {
               <h2 id="why-join-title" className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-base-content mb-3">
                 {t('whyJoinTitle')}
               </h2>
-              <p className="text-lg sm:text-xl opacity-90 max-w-xl mx-auto">
+              <p className="text-lg sm:text-xl text-base-content/90 max-w-xl mx-auto">
                 {t('whyJoinIntro')}
               </p>
             </header>
@@ -153,7 +182,7 @@ export default function HomePage() {
                     <h3 className="text-lg sm:text-xl font-semibold text-base-content mb-2">
                       {t(item.titleKey as keyof typeof t)}
                     </h3>
-                    <p className="text-sm sm:text-base opacity-80 leading-relaxed">
+                    <p className="text-sm sm:text-base text-base-content/80 leading-relaxed">
                       {t(item.descKey as keyof typeof t)}
                     </p>
                   </article>
@@ -169,15 +198,14 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* CTA finale : rappel des actions */}
-        <section className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center border-t border-base-300/50">
-          <p className="text-base opacity-80 mb-6">
-            {t('seeCatalog')} · {t('becomeAffiliate')} · {t('becomeSupplier')}
+        {/* CTA finale : accroche intuitive + actions */}
+        <section className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center border-t border-base-300">
+          <p className="text-base sm:text-lg text-base-content/85 mb-6 max-w-md mx-auto font-medium">
+            {t('ctaFooterTagline')}
           </p>
           <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <Link href="/catalog" className="btn btn-ghost btn-lg">{t('seeCatalog')}</Link>
-            <Link href="/auth/register?role=affiliate" className="btn btn-ghost btn-lg">{t('becomeAffiliate')}</Link>
-            <Link href="/auth/register?role=supplier" className="btn btn-ghost btn-lg">{t('becomeSupplier')}</Link>
+            <Link href="/auth/register" className="btn btn-ghost btn-lg">{t('becomePartner')}</Link>
           </div>
         </section>
       </main>

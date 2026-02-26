@@ -59,8 +59,41 @@ export function isExternalMediaUrl(url: string): boolean {
   return u.startsWith('http://') || u.startsWith('https://');
 }
 
+/**
+ * Si l’URL est une page Google Images (imgres), extrait l’URL réelle de l’image (paramètre imgurl).
+ * Sinon retourne l’URL telle quelle.
+ */
+export function resolveImageUrl(url: string): string {
+  const u = url.trim();
+  try {
+    const parsed = new URL(u);
+    if (parsed.hostname.replace(/^www\./, '') !== 'google.com' && !parsed.hostname.endsWith('.google.com')) {
+      return u;
+    }
+    if (!parsed.pathname.includes('/imgres')) return u;
+    const imgurl = parsed.searchParams.get('imgurl');
+    if (imgurl) return imgurl;
+  } catch {
+    // ignore
+  }
+  return u;
+}
+
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_IMAGE_FETCH_SIZE = 15 * 1024 * 1024; // 15 MB
+
+/** Headers type navigateur pour que les CDN/sites externes acceptent le fetch (évite 403). */
+const FETCH_HEADERS = {
+  Accept: 'image/*',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+} as const;
+
+const FETCH_HEADERS_VIDEO = {
+  Accept: 'video/*',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+} as const;
 
 /**
  * Récupère une image depuis une URL (avec timeout et limite de taille).
@@ -73,7 +106,7 @@ export async function fetchImageBuffer(url: string): Promise<Buffer> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: 'image/*' },
+      headers: FETCH_HEADERS,
     });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -110,7 +143,7 @@ export async function fetchVideoBuffer(url: string): Promise<FetchedVideo> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: 'video/*' },
+      headers: FETCH_HEADERS_VIDEO,
     });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
