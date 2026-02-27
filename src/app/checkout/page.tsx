@@ -8,8 +8,10 @@ import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+import { usePaymentRules, type PaymentRules } from '@/hooks/usePaymentRules';
 
 type ProductInfo = { id: string; name: string; price: number };
+type PaymentMode = 'FULL_UPFRONT' | 'PARTIAL_ADVANCE' | 'PAY_ON_DELIVERY';
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -34,6 +36,10 @@ function CheckoutContent() {
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('FULL_UPFRONT');
+  const [rulesOverride, setRulesOverride] = useState<PaymentRules | null>(null);
+
+  const paymentRules = usePaymentRules(productId ? { productId } : undefined);
 
   useEffect(() => {
     if (!productId) {
@@ -46,7 +52,52 @@ function CheckoutContent() {
       .finally(() => setLoading(false));
   }, [productId]);
 
+  useEffect(() => {
+    if (!paymentRules) return;
+    setRulesOverride(paymentRules);
+    const available: PaymentMode[] = [];
+    if (paymentRules.fullUpfront) available.push('FULL_UPFRONT');
+    if (paymentRules.partialAdvance) available.push('PARTIAL_ADVANCE');
+    if (paymentRules.payOnDelivery) available.push('PAY_ON_DELIVERY');
+    if (available.length === 0) {
+      setPaymentMode('FULL_UPFRONT');
+      return;
+    }
+    setPaymentMode((prev) => (available.includes(prev) ? prev : available[0]));
+  }, [paymentRules]);
+
   const isGuest = !user;
+
+  // Pré-remplir le téléphone de l'utilisateur connecté avec la valeur fournie lors de l'inscription (s'il existe),
+  // tout en laissant le champ librement modifiable.
+  useEffect(() => {
+    if (!user || !token) return;
+    if (phone.trim()) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const fromProfile = (data?.phone ?? '').toString().trim();
+        if (!cancelled && fromProfile && !phone.trim()) {
+          setPhone(fromProfile.slice(0, 20));
+        }
+      } catch {
+        // en cas d'erreur, on n'empêche pas l'utilisateur de saisir son téléphone manuellement
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, token, phone]);
 
   const handleQuantityChange = (value: number) => {
     const q = Math.max(1, Math.min(999, value));
@@ -123,7 +174,11 @@ function CheckoutContent() {
       const body: Record<string, unknown> = {
         items: [{ productId, quantity }],
         shippingAddress: ship,
+        paymentMode,
       };
+      if (paymentMode === 'PARTIAL_ADVANCE') {
+        body.advancePercent = (rulesOverride?.minAdvancePercent ?? 30);
+      }
       if (isGuest) {
         body.guestEmail = email.trim();
         body.guestFirstName = firstName.trim().slice(0, 100) || null;
@@ -281,7 +336,66 @@ function CheckoutContent() {
                 />
               </>
             )}
-            <h2 className="font-semibold text-lg mt-2">{t('shippingAddress')}</h2>
+            <h2 className="font-semibold text-lg mt-2">{t('paymentModes')}</h2>
+            <div className="space-y-2 text-sm">
+              {!rulesOverride && (
+                <p className="opacity-70">{t('loading')}</p>
+              )}
+              {rulesOverride && (
+                <>
+                  {rulesOverride.fullUpfront && (
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        className="radio radio-primary mt-1"
+                        checked={paymentMode === 'FULL_UPFRONT'}
+                        onChange={() => setPaymentMode('FULL_UPFRONT')}
+                      />
+                      <span>
+                        <span className="font-medium">{t('fullUpfront')}</span>
+                        <span className="block text-xs opacity-70">
+                          {t('total')}: {total.toLocaleString()} XOF
+                        </span>
+                      </span>
+                    </label>
+                  )}
+                  {rulesOverride.partialAdvance && (
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        className="radio radio-primary mt-1"
+                        checked={paymentMode === 'PARTIAL_ADVANCE'}
+                        onChange={() => setPaymentMode('PARTIAL_ADVANCE')}
+                      />
+                      <span>
+                        <span className="font-medium">{t('partialAdvance')}</span>
+                        <span className="block text-xs opacity-70">
+                          {rulesOverride.minAdvancePercent}% {t('minAdvancePercent')} ≈{' '}
+                          {Math.round((total * rulesOverride.minAdvancePercent) / 100).toLocaleString()} XOF
+                        </span>
+                      </span>
+                    </label>
+                  )}
+                  {rulesOverride.payOnDelivery && (
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        className="radio radio-primary mt-1"
+                        checked={paymentMode === 'PAY_ON_DELIVERY'}
+                        onChange={() => setPaymentMode('PAY_ON_DELIVERY')}
+                      />
+                      <span>
+                        <span className="font-medium">{t('payOnDelivery')}</span>
+                        <span className="block text-xs opacity-70">
+                          {t('shippingAddress')}
+                        </span>
+                      </span>
+                    </label>
+                  )}
+                </>
+              )}
+            </div>
+            <h2 className="font-semibold text-lg mt-4">{t('shippingAddress')}</h2>
             <div className="flex flex-wrap gap-2 items-start">
               <input
                 type="text"

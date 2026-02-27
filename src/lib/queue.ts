@@ -10,6 +10,7 @@ export const orderQueue = new Queue('orders', connection);
 export const emailQueue = new Queue('emails', connection);
 export const commissionQueue = new Queue('commissions', connection);
 export const deliveryQueue = new Queue('deliveries', connection);
+export const notificationQueue = new Queue('notifications', connection);
 
 export async function addOrderJob(name: string, data: Record<string, unknown>, opts?: { delay?: number }) {
   return orderQueue.add(name, data, { ...opts });
@@ -27,10 +28,22 @@ export async function addDeliveryJob(name: string, data: Record<string, unknown>
   return deliveryQueue.add(name, data);
 }
 
+export async function addNotificationJob(channel: 'whatsapp' | 'in_app', data: Record<string, unknown>) {
+  return notificationQueue.add(channel, data);
+}
+
 export function createOrderWorker(processor: (job: Job) => Promise<void>) {
   return new Worker('orders', processor, connection);
 }
 
 export function createEmailWorker(processor: (job: Job) => Promise<void>) {
   return new Worker('emails', processor, connection);
+}
+
+export function createDeliveryWorker(processor: (job: Job) => Promise<void>) {
+  return new Worker('deliveries', processor, connection);
+}
+
+export function createNotificationWorker(processor: (job: Job) => Promise<void>) {
+  return new Worker('notifications', processor, connection);
 }

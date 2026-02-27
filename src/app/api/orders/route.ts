@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getPaymentRules } from '@/lib/rules-engine';
-import { addOrderJob, addCommissionJob } from '@/lib/queue';
-import type { PaymentModeOrder } from '@prisma/client';
+import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
+import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
+import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -89,6 +90,9 @@ export async function POST(request: NextRequest) {
   }
 
   const rules = await getPaymentRules({ userId: userId ?? undefined });
+  if (paymentMode === 'FULL_UPFRONT' && !rules.fullUpfront) {
+    return NextResponse.json({ error: 'Mode de paiement non autorisé' }, { status: 400 });
+  }
   if (paymentMode === 'PARTIAL_ADVANCE' && (!rules.partialAdvance || (advancePercent ?? 0) < rules.minAdvancePercent)) {
     return NextResponse.json({ error: 'Avance minimum: ' + rules.minAdvancePercent + '%' }, { status: 400 });
   }
@@ -115,6 +119,46 @@ export async function POST(request: NextRequest) {
   const advance = paymentMode === 'FULL_UPFRONT' ? total : paymentMode === 'PARTIAL_ADVANCE' ? (total * (advancePercent ?? 30)) / 100 : 0;
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+  // Étape 1 & 2 : initier paiement Mobile Money + vérifier succès
+  // (sauf pour paiement à la livraison où aucun paiement n'est requis avant la commande)
+  let paidAmount = 0;
+  let paymentMethod: PaymentMethod | null = null;
+  let externalPaymentId: string | null = null;
+
+  if (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') {
+    const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
+    const phoneFromShipping =
+      shippingAddress && typeof (shippingAddress as { phone?: unknown }).phone === 'string'
+        ? String((shippingAddress as { phone?: string }).phone).trim()
+        : '';
+    if (!phoneFromShipping) {
+      return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
+    }
+
+    // Pour l’instant, on passe par l’abstraction Mobile Money (à brancher sur KKIAPAY / FedaPay / BjPay / Stripe).
+    const mmResult = await initiateMobileMoneyPayment({
+      amount: Number(amountToPay),
+      currency: 'XOF',
+      phone: phoneFromShipping,
+      provider: 'MTN',
+      reference: orderNumber,
+      description: `Commande ${orderNumber}`,
+    });
+
+    if (!mmResult.success || !mmResult.transactionId) {
+      return NextResponse.json({ error: mmResult.message ?? 'Paiement refusé' }, { status: 400 });
+    }
+
+    const status = await checkMobileMoneyStatus('MTN', mmResult.transactionId);
+    if (status !== 'SUCCESS') {
+      return NextResponse.json({ error: 'Paiement non confirmé' }, { status: 400 });
+    }
+
+    paidAmount = Number(amountToPay);
+    paymentMethod = 'MOBILE_MONEY_MTN';
+    externalPaymentId = mmResult.transactionId;
+  }
+
   const order = await prisma.order.create({
     data: {
       orderNumber,
@@ -123,14 +167,14 @@ export async function POST(request: NextRequest) {
       guestFirstName: isGuest ? guestFirstName : null,
       guestLastName: isGuest ? guestLastName : null,
       companyProfileId: companyId,
-      status: 'PENDING',
+      status: paymentMode === 'PAY_ON_DELIVERY' ? 'PENDING' : 'CONFIRMED',
       paymentMode,
       advancePercent: advancePercent ?? null,
       subtotal,
       shippingAmount,
       total,
-      advancePaid: 0,
-      balanceDue: total - advance,
+      advancePaid: paidAmount,
+      balanceDue: total - paidAmount,
       currency: 'XOF',
       affiliateLinkId,
       shippingAddress,
@@ -153,7 +197,25 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (paymentMethod && paidAmount > 0 && externalPaymentId) {
+    await prisma.payment.create({
+      data: {
+        orderId: order.id,
+        userId: userId ?? (order.userId as string),
+        amount: paidAmount,
+        currency: 'XOF',
+        method: paymentMethod,
+        status: 'COMPLETED',
+        externalId: externalPaymentId,
+        metadata: {
+          gateway: 'MOBILE_MONEY',
+        },
+      },
+    });
+  }
+
   await addOrderJob('created', { orderId: order.id });
+  await addDeliveryJob('created', { orderId: order.id });
   await addCommissionJob(order.id, {});
 
   return NextResponse.json({
