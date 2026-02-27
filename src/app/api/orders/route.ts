@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getPaymentRules } from '@/lib/rules-engine';
 import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
 import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
+import { isPaymentAcceptedCurrency, shippingInCurrency, convertToXOF } from '@/lib/currency';
 import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -110,12 +111,49 @@ export async function POST(request: NextRequest) {
   }
 
   const companyId = products[0].companyProfileId;
-  const subtotal = items.reduce((sum: number, i: { productId: string; quantity: number }) => {
-    const p = products.find((x) => x.id === i.productId);
-    return sum + Number(p?.price ?? 0) * (i.quantity || 1);
-  }, 0);
-  const shippingAmount = 2000;
-  const total = subtotal + shippingAmount;
+  const bodyCurrency =
+    typeof body.currency === 'string' && body.currency.trim()
+      ? String(body.currency).trim().toUpperCase()
+      : null;
+  const bodySubtotal = typeof body.subtotal === 'number' ? body.subtotal : null;
+  const bodyShipping = typeof body.shippingAmount === 'number' ? body.shippingAmount : null;
+  const bodyTotal = typeof body.total === 'number' ? body.total : null;
+
+  let currency: string;
+  let subtotal: number;
+  let shippingAmount: number;
+  let total: number;
+
+  if (
+    bodyCurrency != null &&
+    bodySubtotal != null &&
+    bodyShipping != null &&
+    bodyTotal != null
+  ) {
+    currency = bodyCurrency;
+    subtotal = bodySubtotal;
+    shippingAmount = bodyShipping;
+    total = bodyTotal;
+  } else {
+    subtotal = items.reduce((sum: number, i: { productId: string; quantity: number }) => {
+      const p = products.find((x) => x.id === i.productId);
+      return sum + Number(p?.price ?? 0) * (i.quantity || 1);
+    }, 0);
+    const productCurrency = (products[0].currency as string) || 'XOF';
+    currency = productCurrency;
+    shippingAmount = shippingInCurrency(productCurrency);
+    total = subtotal + shippingAmount;
+  }
+
+  if (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') {
+    if (!isPaymentAcceptedCurrency(currency)) {
+      return NextResponse.json(
+        { error: `Le paiement n'est pas pris en charge pour la devise ${currency}. Utilisez une devise acceptée (ex. XOF) après conversion.` },
+        { status: 400 }
+      );
+    }
+  }
+
   const advance = paymentMode === 'FULL_UPFRONT' ? total : paymentMode === 'PARTIAL_ADVANCE' ? (total * (advancePercent ?? 30)) / 100 : 0;
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -127,6 +165,12 @@ export async function POST(request: NextRequest) {
 
   if (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') {
     const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
+    if (currency !== 'XOF') {
+      return NextResponse.json(
+        { error: 'Le paiement Mobile Money est en XOF. Passez par la conversion proposée sur la page de commande.' },
+        { status: 400 }
+      );
+    }
     const phoneFromShipping =
       shippingAddress && typeof (shippingAddress as { phone?: unknown }).phone === 'string'
         ? String((shippingAddress as { phone?: string }).phone).trim()
@@ -175,35 +219,45 @@ export async function POST(request: NextRequest) {
       total,
       advancePaid: paidAmount,
       balanceDue: total - paidAmount,
-      currency: 'XOF',
+      currency,
       affiliateLinkId,
       shippingAddress,
     },
   });
 
+  const orderCurrency = currency;
+  const productCurrencies = new Map(products.map((p) => [p.id, (p.currency as string) || 'XOF']));
+
   for (const i of items) {
     const p = products.find((x) => x.id === i.productId)!;
     const qty = Math.max(1, i.quantity || 1);
-    const unitPrice = Number(p.price);
+    const productCurrency = productCurrencies.get(p.id) ?? 'XOF';
+    const unitPriceSource = Number(p.price);
+    const unitPrice =
+      orderCurrency === productCurrency
+        ? unitPriceSource
+        : Math.round(convertToXOF(unitPriceSource, productCurrency) * 100) / 100;
+    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
     await prisma.orderItem.create({
       data: {
         orderId: order.id,
         productId: p.id,
         quantity: qty,
         unitPrice,
-        total: unitPrice * qty,
+        total: lineTotal,
         affiliateCommissionPercent: p.affiliateCommissionPercent,
       },
     });
   }
 
-  if (paymentMethod && paidAmount > 0 && externalPaymentId) {
+  const paymentUserId = userId ?? order.userId;
+  if (paymentMethod && paidAmount > 0 && externalPaymentId && paymentUserId) {
     await prisma.payment.create({
       data: {
         orderId: order.id,
-        userId: userId ?? (order.userId as string),
+        userId: paymentUserId,
         amount: paidAmount,
-        currency: 'XOF',
+        currency,
         method: paymentMethod,
         status: 'COMPLETED',
         externalId: externalPaymentId,

@@ -9,8 +9,16 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { usePaymentRules, type PaymentRules } from '@/hooks/usePaymentRules';
+import {
+  CANONICAL_CURRENCY,
+  PAYMENT_ACCEPTED_CURRENCIES,
+  isPaymentAcceptedCurrency,
+  convertToXOF,
+  shippingInCurrency,
+  SHIPPING_AMOUNT_XOF,
+} from '@/lib/currency';
 
-type ProductInfo = { id: string; name: string; price: number };
+type ProductInfo = { id: string; name: string; price: number; currency: string };
 type PaymentMode = 'FULL_UPFRONT' | 'PARTIAL_ADVANCE' | 'PAY_ON_DELIVERY';
 
 function CheckoutContent() {
@@ -38,8 +46,19 @@ function CheckoutContent() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('FULL_UPFRONT');
   const [rulesOverride, setRulesOverride] = useState<PaymentRules | null>(null);
+  /** Utilisateur accepte de payer en devise acceptée (XOF) après conversion quand la devise du produit ne l'est pas. */
+  const [conversionAccepted, setConversionAccepted] = useState(false);
 
   const paymentRules = usePaymentRules(productId ? { productId } : undefined);
+
+  useEffect(() => {
+    if (!product) return;
+    const productCurrency = product.currency || CANONICAL_CURRENCY;
+    const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
+    if (!requiresPayment || isPaymentAcceptedCurrency(productCurrency)) {
+      setConversionAccepted(false);
+    }
+  }, [product, paymentMode]);
 
   useEffect(() => {
     if (!productId) {
@@ -48,7 +67,14 @@ function CheckoutContent() {
     }
     fetch(`/api/products/${productId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((p) => p && setProduct({ id: p.id, name: p.name, price: Number(p.price) }))
+      .then((p) =>
+        p && setProduct({
+          id: p.id,
+          name: p.name,
+          price: Number(p.price),
+          currency: String(p.currency ?? CANONICAL_CURRENCY).trim().toUpperCase(),
+        })
+      )
       .finally(() => setLoading(false));
   }, [productId]);
 
@@ -147,6 +173,14 @@ function CheckoutContent() {
     e.preventDefault();
     setError('');
     if (!productId || !product) return;
+    const productCurrency = product.currency || CANONICAL_CURRENCY;
+    const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
+    const needsConversion =
+      requiresPayment && !isPaymentAcceptedCurrency(productCurrency);
+    if (needsConversion && !conversionAccepted) {
+      setError(t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'));
+      return;
+    }
     const ship: Record<string, unknown> = {
       address: address.trim(),
       city: city.trim(),
@@ -175,9 +209,16 @@ function CheckoutContent() {
         items: [{ productId, quantity }],
         shippingAddress: ship,
         paymentMode,
+        currency: needsConversion ? CANONICAL_CURRENCY : productCurrency,
       };
       if (paymentMode === 'PARTIAL_ADVANCE') {
         body.advancePercent = (rulesOverride?.minAdvancePercent ?? 30);
+      }
+      if (needsConversion) {
+        const subtotalXOF = Math.round(convertToXOF(product.price * quantity, productCurrency));
+        body.subtotal = subtotalXOF;
+        body.shippingAmount = SHIPPING_AMOUNT_XOF;
+        body.total = subtotalXOF + SHIPPING_AMOUNT_XOF;
       }
       if (isGuest) {
         body.guestEmail = email.trim();
@@ -246,9 +287,21 @@ function CheckoutContent() {
     );
   }
 
+  const productCurrency = product.currency || CANONICAL_CURRENCY;
   const subtotal = product.price * quantity;
-  const shippingAmount = 2000;
+  const shippingAmount = shippingInCurrency(productCurrency);
   const total = subtotal + shippingAmount;
+  const needsConversion =
+    (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') &&
+    !isPaymentAcceptedCurrency(productCurrency);
+  const subtotalXOF = needsConversion ? Math.round(convertToXOF(subtotal, productCurrency)) : 0;
+  const totalXOF = needsConversion ? subtotalXOF + SHIPPING_AMOUNT_XOF : 0;
+  const advanceXOF =
+    needsConversion && paymentMode === 'PARTIAL_ADVANCE'
+      ? Math.round((totalXOF * (rulesOverride?.minAdvancePercent ?? 30)) / 100)
+      : needsConversion && paymentMode === 'FULL_UPFRONT'
+        ? totalXOF
+        : 0;
 
   return (
     <div className="min-h-screen bg-base-200 flex flex-col">
@@ -297,11 +350,27 @@ function CheckoutContent() {
                 </div>
               </label>
             </div>
-            <p className="text-primary font-bold mt-2">{product.price.toLocaleString()} × {quantity} = {subtotal.toLocaleString()} XOF</p>
-            <p className="text-sm opacity-80">+ {shippingAmount.toLocaleString()} XOF {t('shipping')}</p>
-            <p className="font-bold">{t('total')}: {total.toLocaleString()} XOF</p>
+            <p className="text-primary font-bold mt-2">{product.price.toLocaleString('fr-FR')} × {quantity} = {subtotal.toLocaleString('fr-FR')} {productCurrency}</p>
+            <p className="text-sm opacity-80">+ {shippingAmount.toLocaleString('fr-FR')} {productCurrency} {t('shipping')}</p>
+            <p className="font-bold">{t('total')}: {total.toLocaleString('fr-FR')} {productCurrency}</p>
           </div>
         </div>
+        {needsConversion && (
+          <div className="alert alert-warning mb-4 text-sm">
+            <span>{t('paymentCurrencyNotSupported').replace('{currency}', productCurrency)}</span>
+            <p className="mt-2 font-medium">{t('payInAcceptedCurrency').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF')}</p>
+            <p className="mt-1 opacity-90">{t('convertedAmount')}: {totalXOF.toLocaleString('fr-FR')} XOF</p>
+            <label className="flex items-center gap-2 mt-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm"
+                checked={conversionAccepted}
+                onChange={(e) => setConversionAccepted(e.target.checked)}
+              />
+              <span>{t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF')}</span>
+            </label>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="card bg-base-100 shadow-xl">
           <div className="card-body p-4 sm:p-6">
             {isGuest && (
@@ -354,7 +423,7 @@ function CheckoutContent() {
                       <span>
                         <span className="font-medium">{t('fullUpfront')}</span>
                         <span className="block text-xs opacity-70">
-                          {t('total')}: {total.toLocaleString()} XOF
+                          {t('total')}: {total.toLocaleString('fr-FR')} {productCurrency}
                         </span>
                       </span>
                     </label>
@@ -370,8 +439,9 @@ function CheckoutContent() {
                       <span>
                         <span className="font-medium">{t('partialAdvance')}</span>
                         <span className="block text-xs opacity-70">
-                          {rulesOverride.minAdvancePercent}% {t('minAdvancePercent')} ≈{' '}
-                          {Math.round((total * rulesOverride.minAdvancePercent) / 100).toLocaleString()} XOF
+                          {rulesOverride.minAdvancePercent}% {t('minAdvancePercent')} {needsConversion
+                            ? `${Math.round((totalXOF * rulesOverride.minAdvancePercent) / 100).toLocaleString('fr-FR')} XOF`
+                            : `${(total * rulesOverride.minAdvancePercent / 100).toLocaleString('fr-FR')} ${productCurrency}`}
                         </span>
                       </span>
                     </label>
@@ -447,7 +517,11 @@ function CheckoutContent() {
               maxLength={20}
             />
             {error && <div className="alert alert-error text-sm break-words">{error}</div>}
-            <button type="submit" className="btn btn-primary w-full" disabled={submitting}>
+            <button
+              type="submit"
+              className="btn btn-primary w-full"
+              disabled={submitting || (needsConversion && !conversionAccepted)}
+            >
               {submitting ? '...' : t('confirmOrder')}
             </button>
           </div>
