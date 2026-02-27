@@ -83,14 +83,14 @@ export default function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-base-200">
-      <header className="navbar bg-base-100 border-b border-base-300 shadow-sm px-2 sm:px-4 min-h-12 sm:min-h-14 py-1 gap-1 sm:gap-2 flex-nowrap overflow-visible w-full max-w-full min-w-0">
+      <header className="navbar navbar-catalog-page bg-base-100 border-b border-base-300 shadow-sm px-2 sm:px-4 min-h-12 sm:min-h-14 py-1 gap-1 sm:gap-2 flex-nowrap overflow-visible w-full max-w-full min-w-0">
         {/* Logo : visible en entier sur petit écran */}
         <div className="navbar-start min-w-0 flex-1 sm:flex-initial sm:flex-none pl-0 pr-1">
           <AppLogo className="btn btn-ghost text-sm sm:text-base px-1 sm:px-2 py-2 normal-case hover:opacity-90 no-underline overflow-visible text-left w-full sm:w-auto max-w-full font-bold tracking-tight" />
         </div>
-        {/* Barre de recherche : design distinct dans le header, accent primary au focus */}
-        <div className="navbar-center flex-1 min-w-[140px] sm:min-w-[200px] flex justify-center px-2 sm:px-3 w-full max-w-[200px] sm:max-w-[280px] md:max-w-[340px] lg:max-w-[400px] xl:max-w-[440px]">
-          <label className="relative flex w-full items-center rounded-xl border border-base-300 bg-base-200/90 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/25 focus-within:shadow-md min-h-10 sm:min-h-11">
+        {/* Barre de recherche : occupe tout l'espace entre logo et onglets (classe dédiée pour éviter les conflits avec .navbar-center) */}
+        <div className="catalog-navbar-search">
+          <label className="catalog-search-label relative flex w-full min-w-0 items-center rounded-xl border border-base-300 bg-base-200/90 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/25 focus-within:shadow-md min-h-10 sm:min-h-11">
             <span className="pointer-events-none flex shrink-0 items-center pl-3.5 text-base-content/50" aria-hidden>
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-[18px] sm:w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />

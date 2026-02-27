@@ -35,10 +35,54 @@ body {
   min-height: 0;
   overflow: visible; /* les menus déroulants restent visibles */
 }
+.navbar .navbar-end {
+  padding-right: 1rem;
+}
+@media (min-width: 640px) {
+  .navbar .navbar-end {
+    padding-right: 1.25rem;
+  }
+}
+@media (min-width: 1024px) {
+  .navbar .navbar-end {
+    padding-right: 1.5rem;
+  }
+}
 .navbar .navbar-center {
   min-width: 0;
   overflow: hidden;
   flex-shrink: 1;
+}
+
+/* Page catalog : barre de recherche centrée occupant tout l'espace entre logo et onglets (sans .navbar-center pour éviter les conflits) */
+.catalog-navbar-search {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  display: flex !important;
+  align-items: stretch;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.catalog-navbar-search .catalog-search-label {
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  min-width: 120px !important;
+  max-width: none !important;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center;
+}
+@media (min-width: 640px) {
+  .catalog-navbar-search .catalog-search-label {
+    min-width: 160px;
+  }
+}
+.catalog-navbar-search .catalog-search-label input {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  width: 0 !important;
+  box-sizing: border-box;
 }
 
 /* Menus déroulants au premier plan (au-dessus de la navbar sticky) */
