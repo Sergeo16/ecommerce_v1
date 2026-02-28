@@ -53,6 +53,7 @@ model User {
   payments         Payment[]
   auditLogs        AuditLog[]
   refreshTokens    RefreshToken[]
+  notifications    Notification[]
 
   // Money Machine: fidélité, parrainage, KYC, 2FA
   userLoyaltyPoints   UserLoyaltyPoints?
@@ -493,6 +494,23 @@ model WithdrawalRequest {
 
   @@index([userId])
   @@map("withdrawal_requests")
+}
+
+// ============ NOTIFICATIONS IN-APP ============
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?   @db.Text
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
 
 // ============ RÈGLES GLOBALES (SUPER ADMIN) ============

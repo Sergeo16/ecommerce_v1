@@ -7,6 +7,8 @@ import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+import { useCart } from '@/context/CartContext';
+import { CartLink } from '@/components/CartLink';
 
 /** URL absolue pour les images (uploads /api/...) afin qu’elles s’affichent correctement. */
 function toAbsoluteMediaUrl(url: string): string {
@@ -49,6 +51,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
   const { t } = useLocale();
+  const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -105,6 +108,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
           <Link href="/catalog" className="btn btn-ghost btn-sm text-base-content whitespace-nowrap shrink-0">← {t('catalog')}</Link>
         </div>
         <div className="navbar-end shrink-0 flex-nowrap gap-1">
+          <CartLink />
           <ThemeSwitcher />
           <LocaleSwitcher />
         </div>
@@ -251,6 +255,22 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
               <Link href={`/checkout?productId=${product.id}&qty=${quantity}`} className="btn btn-primary">
                 {t('buy')}
               </Link>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() =>
+                  addItem({
+                    productId: product.id,
+                    name: product.name,
+                    price: product.price,
+                    currency: product.currency ?? 'XOF',
+                    quantity,
+                    slug,
+                  })
+                }
+              >
+                {t('addToCart')}
+              </button>
               <Link href="/catalog" className="btn btn-outline">{t('backToCatalog')}</Link>
             </div>
           </div>

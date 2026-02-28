@@ -7,6 +7,8 @@ import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+import { useCart } from '@/context/CartContext';
+import { CartLink } from '@/components/CartLink';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -35,6 +37,7 @@ export default function CatalogPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useLocale();
+  const { addItem, itemCount } = useCart();
   const categorySlug = searchParams.get('category');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
@@ -109,6 +112,7 @@ export default function CatalogPage() {
         </div>
         {/* Desktop : thème, langue, connexion, dashboard */}
         <div className="navbar-end shrink-0 flex-nowrap gap-1 hidden sm:flex">
+          <CartLink />
           <ThemeSwitcher />
           <LocaleSwitcher />
           <Link href="/auth/login" className="btn btn-ghost btn-sm">{t('login')}</Link>
@@ -147,6 +151,10 @@ export default function CatalogPage() {
               </button>
             </div>
             <nav className="flex flex-col py-2">
+              <Link href="/cart" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content flex items-center gap-2" onClick={closeMenu}>
+                <span>{t('cart')}</span>
+                {itemCount > 0 && <span className="badge badge-primary badge-sm">{itemCount}</span>}
+              </Link>
               <Link href="/auth/login" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('login')}</Link>
               <Link href="/dashboard" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('dashboard')}</Link>
               <div className="border-t border-base-300 my-2" />
@@ -182,8 +190,8 @@ export default function CatalogPage() {
               const img = p.imageUrls?.[mainIdx] ?? p.imageUrls?.[0];
               const imgSrc = img ? toAbsoluteImageUrl(img) : '';
               return (
-              <Link key={p.id} href={`/p/${p.slug}?id=${p.id}`} className="block h-full">
-                <div className="card bg-base-100 border border-base-300 shadow hover:shadow-xl transition-shadow h-full flex flex-col">
+              <div key={p.id} className="card bg-base-100 border border-base-300 shadow hover:shadow-xl transition-shadow h-full flex flex-col min-w-0">
+                <Link href={`/p/${p.slug}?id=${p.id}`} className="block flex-1 min-h-0">
                   <figure className="h-40 bg-base-300 shrink-0 border-b border-base-300">
                     {imgSrc ? (
                       <img src={imgSrc} alt={p.name} className="object-cover w-full h-full" />
@@ -191,25 +199,50 @@ export default function CatalogPage() {
                       <span className="text-4xl opacity-50">📦</span>
                     )}
                   </figure>
-                  <div className="card-body p-4 flex-1 flex flex-col">
+                  <div className="card-body p-4 flex-1 flex flex-col min-w-0">
                     <h2 className="card-title text-sm line-clamp-2 text-base-content">{p.name}</h2>
                     <p className="text-primary font-bold">{p.price.toLocaleString()} {p.currency ?? 'XOF'}</p>
                     {p.companyProfile && (
                       <p className="text-xs text-base-content/70">{p.companyProfile.companyName}</p>
                     )}
-                    <div className="card-actions justify-center mt-3 pt-3 border-t border-base-300">
-                      <span className="btn btn-primary btn-sm w-full gap-1.5 sm:gap-2" aria-label={t('viewDetailsAndBuy')}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        <span className="text-lg font-bold leading-none sm:hidden" aria-hidden>+</span>
-                        <span className="hidden sm:inline">{t('viewDetailsAndBuy')}</span>
-                      </span>
-                    </div>
                   </div>
+                </Link>
+                <div className="card-actions p-4 pt-0 gap-2 flex flex-col sm:flex-row min-w-0 w-full">
+                  <Link
+                    href={`/p/${p.slug}?id=${p.id}`}
+                    className="btn btn-primary btn-sm flex-1 min-w-0 justify-center gap-1.5"
+                    title={t('viewDetailsAndBuy')}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('viewDetails')}</span>
+                    <span className="sm:hidden whitespace-nowrap">{t('viewDetailsAndBuy')}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm flex-1 min-w-0 justify-center gap-1.5"
+                    onClick={() =>
+                      addItem({
+                        productId: p.id,
+                        name: p.name,
+                        price: p.price,
+                        currency: p.currency ?? 'XOF',
+                        quantity: 1,
+                        slug: p.slug,
+                      })
+                    }
+                    title={t('addToCart')}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('addToCartShort')}</span>
+                    <span className="sm:hidden whitespace-nowrap">{t('addToCart')}</span>
+                  </button>
                 </div>
-              </Link>
+              </div>
               );
             })}
           </div>

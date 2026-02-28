@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/context/AuthContext';
+import { CartProvider } from '@/context/CartContext';
 import { LocaleProvider } from '@/context/LocaleContext';
 import { MaintenanceGate } from '@/components/MaintenanceGate';
 import { AdminMaintenanceBanner } from '@/components/AdminMaintenanceBanner';
@@ -22,10 +23,12 @@ export default function RootLayout({
         <ThemeProvider>
           <LocaleProvider>
             <AuthProvider>
+              <CartProvider>
               <MaintenanceGate>
                 <AdminMaintenanceBanner />
                 {children}
               </MaintenanceGate>
+              </CartProvider>
             </AuthProvider>
           </LocaleProvider>
         </ThemeProvider>

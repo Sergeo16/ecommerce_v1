@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Routes API protégées
-  if (path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/orders') || path.startsWith('/api/affiliate') || path.startsWith('/api/courier') || path.startsWith('/api/supplier')) {
+  if (path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/orders') || path.startsWith('/api/affiliate') || path.startsWith('/api/courier') || path.startsWith('/api/supplier') || path.startsWith('/api/notifications')) {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

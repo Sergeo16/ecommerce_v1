@@ -7,6 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
+import { CartLink } from '@/components/CartLink';
+import { useCart } from '@/context/CartContext';
 import { useLocale } from '@/context/LocaleContext';
 import { usePaymentRules, type PaymentRules } from '@/hooks/usePaymentRules';
 import {
@@ -25,9 +27,11 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
   const { t } = useLocale();
+  const { items: cartItems, clearCart } = useCart();
   const productId = searchParams.get('productId');
   const qtyFromUrl = Math.max(1, Math.min(999, parseInt(searchParams.get('qty') ?? '1', 10)));
 
+  const fromCart = !productId && cartItems.length > 0;
   const [product, setProduct] = useState<ProductInfo | null>(null);
   const [quantity, setQuantity] = useState(qtyFromUrl);
   const [loading, setLoading] = useState(true);
@@ -49,18 +53,23 @@ function CheckoutContent() {
   /** Utilisateur accepte de payer en devise acceptée (XOF) après conversion quand la devise du produit ne l'est pas. */
   const [conversionAccepted, setConversionAccepted] = useState(false);
 
-  const paymentRules = usePaymentRules(productId ? { productId } : undefined);
+  const firstProductId = productId ?? cartItems[0]?.productId;
+  const paymentRules = usePaymentRules(firstProductId ? { productId: firstProductId } : undefined);
 
   useEffect(() => {
-    if (!product) return;
-    const productCurrency = product.currency || CANONICAL_CURRENCY;
+    const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
     const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
     if (!requiresPayment || isPaymentAcceptedCurrency(productCurrency)) {
       setConversionAccepted(false);
     }
-  }, [product, paymentMode]);
+  }, [product, paymentMode, fromCart, cartItems]);
 
   useEffect(() => {
+    if (fromCart) {
+      setProduct(null);
+      setLoading(false);
+      return;
+    }
     if (!productId) {
       setLoading(false);
       return;
@@ -76,7 +85,7 @@ function CheckoutContent() {
         })
       )
       .finally(() => setLoading(false));
-  }, [productId]);
+  }, [productId, fromCart]);
 
   useEffect(() => {
     if (!paymentRules) return;
@@ -172,8 +181,11 @@ function CheckoutContent() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!productId || !product) return;
-    const productCurrency = product.currency || CANONICAL_CURRENCY;
+    const items = fromCart
+      ? cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity }))
+      : productId && product ? [{ productId, quantity }] : [];
+    if (items.length === 0) return;
+    const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
     const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
     const needsConversion =
       requiresPayment && !isPaymentAcceptedCurrency(productCurrency);
@@ -206,7 +218,7 @@ function CheckoutContent() {
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const body: Record<string, unknown> = {
-        items: [{ productId, quantity }],
+        items,
         shippingAddress: ship,
         paymentMode,
         currency: needsConversion ? CANONICAL_CURRENCY : productCurrency,
@@ -215,7 +227,8 @@ function CheckoutContent() {
         body.advancePercent = (rulesOverride?.minAdvancePercent ?? 30);
       }
       if (needsConversion) {
-        const subtotalXOF = Math.round(convertToXOF(product.price * quantity, productCurrency));
+        const cartSubtotal = fromCart ? cartItems.reduce((s, i) => s + i.price * i.quantity, 0) : product!.price * quantity;
+        const subtotalXOF = Math.round(convertToXOF(cartSubtotal, productCurrency));
         body.subtotal = subtotalXOF;
         body.shippingAmount = SHIPPING_AMOUNT_XOF;
         body.total = subtotalXOF + SHIPPING_AMOUNT_XOF;
@@ -229,6 +242,7 @@ function CheckoutContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
       setOrderNumber(data.order?.orderNumber ?? null);
+      if (fromCart) clearCart();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -236,7 +250,8 @@ function CheckoutContent() {
     }
   }
 
-  if (loading || !productId) {
+  const hasCheckoutItems = fromCart || (productId && product);
+  if (loading && !fromCart) {
     return (
       <div className="min-h-screen bg-base-200 flex flex-col">
         <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
@@ -244,16 +259,41 @@ function CheckoutContent() {
             <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
           </div>
           <div className="navbar-end shrink-0 flex-nowrap gap-1">
+            <CartLink />
             <ThemeSwitcher />
             <LocaleSwitcher />
           </div>
         </header>
         <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1">
-          {!productId ? (
-            <p className="text-center text-base-content/70">{t('noProduct')}</p>
-          ) : (
-            <span className="loading loading-spinner mx-auto block w-10" />
-          )}
+          <span className="loading loading-spinner mx-auto block w-10" />
+        </main>
+      </div>
+    );
+  }
+  if (!hasCheckoutItems) {
+    return (
+      <div className="min-h-screen bg-base-200 flex flex-col">
+        <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
+          <div className="navbar-start shrink-0 min-w-0 max-w-[50%]">
+            <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
+          </div>
+          <div className="navbar-end shrink-0 flex-nowrap gap-1">
+            <CartLink />
+            <ThemeSwitcher />
+            <LocaleSwitcher />
+          </div>
+        </header>
+        <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1 flex flex-col items-center justify-center">
+          <div className="card bg-base-100 shadow-xl max-w-md w-full">
+            <div className="card-body text-center">
+              <h1 className="text-xl font-bold">{t('noProduct')}</h1>
+              <p className="text-base-content/70">{t('cartEmptyDesc')}</p>
+              <div className="flex gap-2 justify-center mt-4">
+                <Link href="/cart" className="btn btn-outline">{t('cart')}</Link>
+                <Link href="/catalog" className="btn btn-primary">{t('catalog')}</Link>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     );
@@ -267,6 +307,7 @@ function CheckoutContent() {
             <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
           </div>
           <div className="navbar-end shrink-0 flex-nowrap gap-1">
+            <CartLink />
             <ThemeSwitcher />
             <LocaleSwitcher />
           </div>
@@ -287,8 +328,8 @@ function CheckoutContent() {
     );
   }
 
-  const productCurrency = product.currency || CANONICAL_CURRENCY;
-  const subtotal = product.price * quantity;
+  const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product!.currency ?? CANONICAL_CURRENCY);
+  const subtotal = fromCart ? cartItems.reduce((s, i) => s + i.price * i.quantity, 0) : product!.price * quantity;
   const shippingAmount = shippingInCurrency(productCurrency);
   const total = subtotal + shippingAmount;
   const needsConversion =
@@ -310,6 +351,7 @@ function CheckoutContent() {
           <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
         </div>
         <div className="navbar-end shrink-0 flex-nowrap gap-1">
+          <CartLink />
           <ThemeSwitcher />
           <LocaleSwitcher />
         </div>
@@ -318,39 +360,52 @@ function CheckoutContent() {
         <h1 className="text-2xl font-bold mb-4 break-words">{t('checkoutTitle')}</h1>
         <div className="card bg-base-100 shadow-xl mb-6">
           <div className="card-body p-4 sm:p-6">
-            <p className="font-semibold break-words">{product.name}</p>
-            <div className="flex flex-wrap items-center gap-3 mt-2">
-              <label className="flex items-center gap-2">
-                <span className="text-sm font-medium">{t('quantity')}:</span>
-                <div className="join">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline join-item"
-                    onClick={() => handleQuantityChange(quantity - 1)}
-                    aria-label="-"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={999}
-                    className="input input-bordered input-sm join-item w-16 text-center"
-                    value={quantity}
-                    onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline join-item"
-                    onClick={() => handleQuantityChange(quantity + 1)}
-                    aria-label="+"
-                  >
-                    +
-                  </button>
+            {fromCart ? (
+              <ul className="space-y-2">
+                {cartItems.map((i) => (
+                  <li key={i.productId} className="flex justify-between items-center gap-2 py-1 border-b border-base-300 last:border-0">
+                    <span className="font-medium break-words">{i.name}</span>
+                    <span className="text-primary font-bold shrink-0">{i.price.toLocaleString('fr-FR')} × {i.quantity}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <>
+                <p className="font-semibold break-words">{product!.name}</p>
+                <div className="flex flex-wrap items-center gap-3 mt-2">
+                  <label className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{t('quantity')}:</span>
+                    <div className="join">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline join-item"
+                        onClick={() => handleQuantityChange(quantity - 1)}
+                        aria-label="-"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={999}
+                        className="input input-bordered input-sm join-item w-16 text-center"
+                        value={quantity}
+                        onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline join-item"
+                        onClick={() => handleQuantityChange(quantity + 1)}
+                        aria-label="+"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
                 </div>
-              </label>
-            </div>
-            <p className="text-primary font-bold mt-2">{product.price.toLocaleString('fr-FR')} × {quantity} = {subtotal.toLocaleString('fr-FR')} {productCurrency}</p>
+                <p className="text-primary font-bold mt-2">{product!.price.toLocaleString('fr-FR')} × {quantity} = {subtotal.toLocaleString('fr-FR')} {productCurrency}</p>
+              </>
+            )}
             <p className="text-sm opacity-80">+ {shippingAmount.toLocaleString('fr-FR')} {productCurrency} {t('shipping')}</p>
             <p className="font-bold">{t('total')}: {total.toLocaleString('fr-FR')} {productCurrency}</p>
           </div>

@@ -34,6 +34,12 @@ export default function AdminSettingsPage() {
   const [supplierIdentityVisible, setSupplierIdentityVisible] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
+  const [notifPlatform, setNotifPlatform] = useState(true);
+  const [notifEmail, setNotifEmail] = useState(false);
+  const [notifWhatsApp, setNotifWhatsApp] = useState(false);
+  const [notifEmailOverride, setNotifEmailOverride] = useState('');
+  const [notifWhatsAppOverride, setNotifWhatsAppOverride] = useState('');
+
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
     Promise.all([
@@ -57,6 +63,12 @@ export default function AdminSettingsPage() {
       const supplierId = data.supplier_identity_visible;
       setSupplierIdentityVisible(supplierId === true);
       setMaintenanceMode((maintenanceData as { maintenance?: boolean }).maintenance === true);
+      const ch = data.admin_notification_channels as { platform?: boolean; email?: boolean; whatsapp?: boolean } | undefined;
+      setNotifPlatform(ch?.platform !== false);
+      setNotifEmail(ch?.email === true);
+      setNotifWhatsApp(ch?.whatsapp === true);
+      setNotifEmailOverride(typeof data.admin_notification_email === 'string' ? data.admin_notification_email : '');
+      setNotifWhatsAppOverride(typeof data.admin_notification_whatsapp_phone === 'string' ? data.admin_notification_whatsapp_phone : '');
     })
     .catch(() => setMessage('error'))
     .finally(() => setLoading(false));
@@ -102,6 +114,13 @@ export default function AdminSettingsPage() {
       await putSetting('theme', defaultTheme);
       await putSetting('delivery_tracking_enabled', deliveryTrackingEnabled);
       await putSetting('supplier_identity_visible', supplierIdentityVisible);
+      await putSetting('admin_notification_channels', {
+        platform: notifPlatform,
+        email: notifEmail,
+        whatsapp: notifWhatsApp,
+      });
+      await putSetting('admin_notification_email', notifEmailOverride.trim() || '');
+      await putSetting('admin_notification_whatsapp_phone', notifWhatsAppOverride.trim() || '');
       setMessage('saved');
       setTimeout(() => setMessage(null), 3000);
     } catch {
@@ -257,6 +276,56 @@ export default function AdminSettingsPage() {
               />
               <span>{supplierIdentityVisible ? t('active') : t('suspended')}</span>
             </label>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('adminNotificationChannels')}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('adminNotificationChannelsDesc')}</p>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={notifPlatform}
+                  onChange={(e) => setNotifPlatform(e.target.checked)}
+                />
+                <span>{t('adminNotificationPlatform')}</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={notifEmail}
+                  onChange={(e) => setNotifEmail(e.target.checked)}
+                />
+                <span>{t('adminNotificationEmail')}</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={notifWhatsApp}
+                  onChange={(e) => setNotifWhatsApp(e.target.checked)}
+                />
+                <span>{t('adminNotificationWhatsApp')}</span>
+              </label>
+            </div>
+            <div className="mt-4 space-y-2">
+              <input
+                type="email"
+                placeholder={t('adminNotificationEmailOverride')}
+                className="input input-bordered w-full max-w-md"
+                value={notifEmailOverride}
+                onChange={(e) => setNotifEmailOverride(e.target.value)}
+              />
+              <input
+                type="tel"
+                placeholder={t('adminNotificationWhatsAppOverride')}
+                className="input input-bordered w-full max-w-md"
+                value={notifWhatsAppOverride}
+                onChange={(e) => setNotifWhatsAppOverride(e.target.value)}
+              />
+            </div>
           </div>
 
           {message === 'saved' && (

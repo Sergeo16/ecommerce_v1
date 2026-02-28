@@ -10,12 +10,16 @@ import {
   addNotificationJob,
 } from '../src/lib/queue';
 import { prisma } from '../src/lib/db';
+import { notifyAdminOrderCreated } from '../src/lib/admin-notifications';
 
 async function processOrderJob(job: { name: string; data: Record<string, unknown> }) {
   if (job.name === 'created') {
     const orderId = job.data.orderId as string;
     if (orderId) {
       await prisma.order.update({ where: { id: orderId }, data: {} }).catch(() => {});
+      await notifyAdminOrderCreated(orderId).catch((err) =>
+        console.error('[Worker] Admin notification failed:', err)
+      );
       console.log('[Worker] Order created:', orderId);
     }
   }

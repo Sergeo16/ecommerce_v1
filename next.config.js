@@ -3,6 +3,9 @@ const { withSentryConfig } = require('@sentry/nextjs');
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    serverComponentsExternalPackages: ['sharp'],
+  },
   images: {
     domains: ['localhost', 's3.amazonaws.com', '*.amazonaws.com'],
     remotePatterns: [{ protocol: 'https', hostname: '**.amazonaws.com', pathname: '/**' }],

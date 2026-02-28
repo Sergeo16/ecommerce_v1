@@ -7,6 +7,7 @@ import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+import { AdminNotificationsBell } from '@/components/AdminNotificationsBell';
 
 export default function DashboardPage() {
   const { user, token, isLoading, logout } = useAuth();
@@ -58,6 +59,9 @@ export default function DashboardPage() {
           <Link href="/dashboard" className="link link-hover font-semibold whitespace-nowrap">{t('dashboard')}</Link>
         </nav>
         <div className="navbar-end shrink-0 flex-nowrap gap-1">
+          {user?.role === 'SUPER_ADMIN' && token && (
+            <AdminNotificationsBell token={token} />
+          )}
           <div className="hidden md:flex items-center gap-1">
             <ThemeSwitcher />
             <LocaleSwitcher />
@@ -132,6 +136,7 @@ export default function DashboardPage() {
             <>
               <Link href="/dashboard/admin/settings" className="btn btn-outline">{t('globalSettings')}</Link>
               <Link href="/dashboard/admin/users" className="btn btn-outline">{t('users')}</Link>
+              <Link href="/dashboard/admin/orders" className="btn btn-outline">Commandes</Link>
             </>
           )}
           {user.role === 'AFFILIATE' && (
