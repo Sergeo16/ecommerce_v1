@@ -12,7 +12,6 @@ import { useLocale } from '@/context/LocaleContext';
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
 
-const CURRENCY_OPTIONS = ['XOF', 'EUR', 'USD', 'XAF', 'CFA', 'GBP', 'CHF'] as const;
 
 const ALLOWED_NAME = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
 // Description : tout sauf < > \ (évite injection HTML/script). Autorise %, €, $, « », etc.
@@ -44,6 +43,7 @@ export default function NewProductPage() {
   const { t } = useLocale();
   const router = useRouter();
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(['XOF']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [uploadingIndex, setUploadingIndex] = useState<{ type: 'image' | 'video'; i: number } | null>(null);
@@ -52,7 +52,6 @@ export default function NewProductPage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [currencyOption, setCurrencyOption] = useState<string>('XOF');
-  const [currencyCustom, setCurrencyCustom] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [categoryOther, setCategoryOther] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>(['']);
@@ -69,26 +68,26 @@ export default function NewProductPage() {
       .then((r) => r.json())
       .then((list) => setCategories(Array.isArray(list) ? list : []));
   }, []);
-
-  // Devise par défaut : celle du wallet utilisateur (quand il change de compte ou de préférence)
   useEffect(() => {
-    if (!token) return;
+    fetch('/api/currencies')
+      .then((r) => r.json())
+      .then((list) => setAllowedCurrencies(Array.isArray(list) && list.length > 0 ? list : ['XOF']));
+  }, []);
+
+  // Devise par défaut : celle du wallet si elle fait partie des devises autorisées
+  useEffect(() => {
+    if (!token || allowedCurrencies.length === 0) return;
     fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.ok ? r.json() : null)
       .then((me) => {
         const walletCurrency = (me?.wallet as { currency?: string } | undefined)?.currency;
         if (walletCurrency && typeof walletCurrency === 'string') {
           const c = walletCurrency.trim().toUpperCase().slice(0, 10);
-          if (CURRENCY_OPTIONS.includes(c as (typeof CURRENCY_OPTIONS)[number])) {
-            setCurrencyOption(c);
-          } else if (c) {
-            setCurrencyOption('OTHER');
-            setCurrencyCustom(c);
-          }
+          if (allowedCurrencies.includes(c)) setCurrencyOption(c);
         }
       })
       .catch(() => {});
-  }, [token]);
+  }, [token, allowedCurrencies]);
 
   function addImage() {
     if (imageUrls.length >= MAX_IMAGES) return;
@@ -166,8 +165,7 @@ export default function NewProductPage() {
   }
 
   function getCurrency(): string {
-    if (currencyOption === 'OTHER') return currencyCustom.trim().slice(0, 10) || 'XOF';
-    return currencyOption;
+    return allowedCurrencies.includes(currencyOption) ? currencyOption : 'XOF';
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -327,24 +325,13 @@ export default function NewProductPage() {
               <div className="flex flex-wrap gap-2 items-center">
                 <select
                   className="select select-bordered select-sm w-28"
-                  value={currencyOption}
+                  value={allowedCurrencies.includes(currencyOption) ? currencyOption : 'XOF'}
                   onChange={(e) => setCurrencyOption(e.target.value)}
                 >
-                  {CURRENCY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {allowedCurrencies.map((c) => (
+                    <option key={c} value={c}>{c === 'XOF' ? `F CFA (${c})` : c}</option>
                   ))}
-                  <option value="OTHER">{t('currencyOther')}</option>
                 </select>
-                {currencyOption === 'OTHER' && (
-                  <input
-                    type="text"
-                    className="input input-bordered input-sm w-24"
-                    placeholder="XXX"
-                    value={currencyCustom}
-                    onChange={(e) => setCurrencyCustom(e.target.value.slice(0, 10))}
-                    maxLength={10}
-                  />
-                )}
               </div>
             </div>
           </div>

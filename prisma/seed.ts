@@ -496,6 +496,11 @@ async function main() {
     update: {},
     create: { key: 'theme', value: 'business', group: 'ui' },
   });
+  await prisma.settings.upsert({
+    where: { key: 'allowed_currencies' },
+    update: {},
+    create: { key: 'allowed_currencies', value: ['XOF'], group: 'payment' },
+  });
 
   console.log('Seed terminé avec succès.');
 }

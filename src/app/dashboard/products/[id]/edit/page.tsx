@@ -11,7 +11,6 @@ import { useLocale } from '@/context/LocaleContext';
 
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
-const CURRENCY_OPTIONS = ['XOF', 'EUR', 'USD', 'XAF', 'CFA', 'GBP', 'CHF'] as const;
 const ALLOWED_NAME = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
 const ALLOWED_DESCRIPTION = /^[^<>\\]*$/u;
 const ALLOWED_CATEGORY = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
@@ -41,6 +40,7 @@ export default function EditProductPage() {
   const { t } = useLocale();
   const router = useRouter();
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(['XOF']);
   const [loadProduct, setLoadProduct] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -50,7 +50,6 @@ export default function EditProductPage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [currencyOption, setCurrencyOption] = useState<string>('XOF');
-  const [currencyCustom, setCurrencyCustom] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [categoryOther, setCategoryOther] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>(['']);
@@ -64,6 +63,9 @@ export default function EditProductPage() {
 
   useEffect(() => {
     fetch('/api/categories').then((r) => r.json()).then((list) => setCategories(Array.isArray(list) ? list : []));
+  }, []);
+  useEffect(() => {
+    fetch('/api/currencies').then((r) => r.json()).then((list) => setAllowedCurrencies(Array.isArray(list) && list.length > 0 ? list : ['XOF']));
   }, []);
 
   useEffect(() => {
@@ -80,12 +82,7 @@ export default function EditProductPage() {
         setDescription(String(p.description ?? ''));
         setPrice(Number(p.price)?.toString() ?? '');
         const cur = String(p.currency ?? 'XOF').trim().toUpperCase();
-        if (CURRENCY_OPTIONS.includes(cur as (typeof CURRENCY_OPTIONS)[number])) {
-          setCurrencyOption(cur);
-        } else if (cur) {
-          setCurrencyOption('OTHER');
-          setCurrencyCustom(cur);
-        }
+        setCurrencyOption(cur || 'XOF');
         setCategoryId((p.categoryId as string) ?? (p.category as { id?: string })?.id ?? '');
         setCategoryOther('');
         const imgs = Array.isArray(p.imageUrls) ? (p.imageUrls as string[]) : [];
@@ -166,8 +163,8 @@ export default function EditProductPage() {
   }
 
   function getCurrency(): string {
-    if (currencyOption === 'OTHER') return currencyCustom.trim().slice(0, 10) || 'XOF';
-    return currencyOption;
+    const code = currencyOption.trim().toUpperCase();
+    return code || 'XOF';
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -307,12 +304,10 @@ export default function EditProductPage() {
             <div className="flex flex-wrap gap-2 items-center">
               <input type="number" min={0} step={0.01} className="input input-bordered w-32" value={price} onChange={(e) => setPrice(e.target.value)} required />
               <select className="select select-bordered select-sm w-28" value={currencyOption} onChange={(e) => setCurrencyOption(e.target.value)}>
-                {CURRENCY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                <option value="OTHER">{t('currencyOther')}</option>
+                {Array.from(new Set([...allowedCurrencies, currencyOption.trim().toUpperCase()].filter(Boolean))).map((c) => (
+                  <option key={c} value={c}>{c === 'XOF' ? `F CFA (${c})` : c}</option>
+                ))}
               </select>
-              {currencyOption === 'OTHER' && (
-                <input type="text" className="input input-bordered input-sm w-24" placeholder="XXX" value={currencyCustom} onChange={(e) => setCurrencyCustom(e.target.value.slice(0, 10))} maxLength={10} />
-              )}
             </div>
           </div>
           <div className="form-control">

@@ -33,6 +33,8 @@ export default function AdminSettingsPage() {
   const [deliveryTrackingEnabled, setDeliveryTrackingEnabled] = useState(true);
   const [supplierIdentityVisible, setSupplierIdentityVisible] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(['XOF']);
+  const [newCurrencyCode, setNewCurrencyCode] = useState('');
 
   const [notifPlatform, setNotifPlatform] = useState(true);
   const [notifEmail, setNotifEmail] = useState(false);
@@ -69,6 +71,11 @@ export default function AdminSettingsPage() {
       setNotifWhatsApp(ch?.whatsapp === true);
       setNotifEmailOverride(typeof data.admin_notification_email === 'string' ? data.admin_notification_email : '');
       setNotifWhatsAppOverride(typeof data.admin_notification_whatsapp_phone === 'string' ? data.admin_notification_whatsapp_phone : '');
+      const curList = data.allowed_currencies;
+      if (Array.isArray(curList) && curList.length > 0) {
+        const codes = curList.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim().toUpperCase());
+        setAllowedCurrencies(codes.includes('XOF') ? codes : ['XOF', ...codes]);
+      }
     })
     .catch(() => setMessage('error'))
     .finally(() => setLoading(false));
@@ -121,6 +128,7 @@ export default function AdminSettingsPage() {
       });
       await putSetting('admin_notification_email', notifEmailOverride.trim() || '');
       await putSetting('admin_notification_whatsapp_phone', notifWhatsAppOverride.trim() || '');
+      await putSetting('allowed_currencies', allowedCurrencies.length > 0 ? allowedCurrencies : ['XOF']);
       setMessage('saved');
       setTimeout(() => setMessage(null), 3000);
     } catch {
@@ -157,6 +165,48 @@ export default function AdminSettingsPage() {
         <span className="loading loading-spinner" />
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('allowedCurrencies')}</h2>
+            <p className="text-sm opacity-80 mb-3">{t('allowedCurrenciesDesc')}</p>
+            <ul className="list-disc list-inside space-y-1 mb-3">
+              <li className="font-medium">{t('currencyXOFLabel')} <span className="text-xs opacity-70">(obligatoire)</span></li>
+              {allowedCurrencies.filter((c) => c !== 'XOF').map((code) => (
+                <li key={code} className="flex items-center gap-2 flex-wrap">
+                  <span>{code}</span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs text-error"
+                    onClick={() => setAllowedCurrencies((prev) => prev.filter((x) => x !== code))}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                type="text"
+                className="input input-bordered input-sm w-28 uppercase"
+                placeholder={t('currencyCodePlaceholder')}
+                value={newCurrencyCode}
+                onChange={(e) => setNewCurrencyCode(e.target.value.slice(0, 10).toUpperCase())}
+                maxLength={10}
+              />
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() => {
+                  const code = newCurrencyCode.trim().toUpperCase();
+                  if (!code || code === 'XOF') return;
+                  if (allowedCurrencies.includes(code)) return;
+                  setAllowedCurrencies((prev) => [...(prev.includes('XOF') ? prev : ['XOF', ...prev]), code].filter((c, i, arr) => arr.indexOf(c) === i));
+                  setNewCurrencyCode('');
+                }}
+              >
+                {t('addCurrency')}
+              </button>
+            </div>
+          </div>
           <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
             <h2 className="font-semibold text-lg mb-2">{t('maintenanceMode')}</h2>
             <p className="text-sm opacity-80 mb-3">{t('maintenanceModeDesc')}</p>
