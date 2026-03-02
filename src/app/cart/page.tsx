@@ -9,7 +9,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 
 export default function CartPage() {
-  const { items, updateQuantity, removeItem, clearCart, itemCount } = useCart();
+  const { items, updateQuantity, removeItem, clearCart, itemCount, backupForCheckout } = useCart();
   const { t } = useLocale();
 
   if (items.length === 0) {
@@ -122,7 +122,7 @@ export default function CartPage() {
             {t('cartEmptyButton')}
           </button>
           <Link href="/catalog" className="btn btn-outline">{t('catalog')}</Link>
-          <Link href="/checkout" className="btn btn-primary flex-1">{t('checkout')}</Link>
+          <Link href="/checkout" className="btn btn-primary flex-1" onClick={backupForCheckout}>{t('checkout')}</Link>
         </div>
       </main>
     </div>

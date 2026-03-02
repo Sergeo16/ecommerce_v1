@@ -13,6 +13,7 @@ export type CartItem = {
 };
 
 const STORAGE_KEY = 'ecommerce_cart';
+const CHECKOUT_BACKUP_KEY = 'ecommerce_checkout_cart_backup';
 
 /** Une seule ligne par produit : on fusionne les doublons (somme des quantités). */
 function normalizeCart(items: CartItem[]): CartItem[] {
@@ -71,6 +72,14 @@ function saveToStorage(items: CartItem[]) {
 type CartContextValue = {
   items: CartItem[];
   itemCount: number;
+  /** True une fois le panier chargé depuis localStorage (client uniquement) */
+  isReady: boolean;
+  /** Force un rechargement depuis localStorage (utile si état désynchronisé) */
+  reloadFromStorage: () => void;
+  /** Sauvegarde le panier pour le checkout (appelé avant navigation depuis le panier) */
+  backupForCheckout: () => void;
+  /** Restaure depuis la sauvegarde checkout si panier vide */
+  restoreFromCheckoutBackup: () => boolean;
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
@@ -81,11 +90,37 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [isReady, setIsReady] = useState(false);
   const pendingAddRef = useRef<Omit<CartItem, 'quantity'> & { quantity: number } | null>(null);
 
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CHECKOUT_BACKUP_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed) ? parsed : [];
+        const restored = normalizeCart(list);
+        if (restored.length > 0) {
+          setItems(restored);
+          saveToStorage(restored);
+          sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
+          setIsReady(true);
+          const onStorage = () => setItems(loadFromStorage());
+          window.addEventListener('storage', onStorage);
+          window.addEventListener('cart-update', onStorage);
+          return () => {
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('cart-update', onStorage);
+          };
+        }
+      }
+    } catch {}
     setItems([]);
     saveToStorage([]);
+    try {
+      sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
+    } catch {}
+    setIsReady(true);
     const onStorage = () => setItems(loadFromStorage());
     window.addEventListener('storage', onStorage);
     window.addEventListener('cart-update', onStorage);
@@ -135,12 +170,50 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = useCallback(() => {
     setItems([]);
     saveToStorage([]);
+    try {
+      sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
+    } catch {}
+  }, []);
+
+  const reloadFromStorage = useCallback(() => {
+    setItems(loadFromStorage());
+  }, []);
+
+  const backupForCheckout = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = loadFromStorage();
+      if (current.length > 0) {
+        sessionStorage.setItem(CHECKOUT_BACKUP_KEY, JSON.stringify(current));
+      }
+    } catch {}
+  }, []);
+
+  const restoreFromCheckoutBackup = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = sessionStorage.getItem(CHECKOUT_BACKUP_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      const list = Array.isArray(parsed) ? parsed : [];
+      if (list.length > 0) {
+        const restored = normalizeCart(list);
+        if (restored.length > 0) {
+          setItems(restored);
+          saveToStorage(restored);
+          sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
+          return true;
+        }
+      }
+      sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
+    } catch {}
+    return false;
   }, []);
 
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, itemCount, addItem, updateQuantity, removeItem, clearCart }}>
+    <CartContext.Provider value={{ items, itemCount, isReady, reloadFromStorage, backupForCheckout, restoreFromCheckoutBackup, addItem, updateQuantity, removeItem, clearCart }}>
       {children}
     </CartContext.Provider>
   );

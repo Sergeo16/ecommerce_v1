@@ -26,7 +26,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
   const { t } = useLocale();
-  const { items: cartItems, clearCart } = useCart();
+  const { items: cartItems, clearCart, isReady: cartReady, reloadFromStorage, restoreFromCheckoutBackup } = useCart();
   const productId = searchParams.get('productId');
   const qtyFromUrl = Math.max(1, Math.min(999, parseInt(searchParams.get('qty') ?? '1', 10)));
 
@@ -67,6 +67,18 @@ function CheckoutContent() {
   }, [product, paymentMode, fromCart, cartItems]);
 
   useEffect(() => {
+    if (orderNumber) return;
+    if (!productId && cartItems.length === 0 && cartReady) {
+      const restored = restoreFromCheckoutBackup();
+      if (!restored) reloadFromStorage();
+    }
+  }, [orderNumber, productId, cartItems.length, cartReady, reloadFromStorage, restoreFromCheckoutBackup]);
+
+  useEffect(() => {
+    if (orderNumber) clearCart();
+  }, [orderNumber, clearCart]);
+
+  useEffect(() => {
     if (fromCart) {
       setProduct(null);
       setLoading(false);
@@ -88,7 +100,7 @@ function CheckoutContent() {
         })
       )
       .finally(() => setLoading(false));
-  }, [productId, fromCart]);
+  }, [productId, fromCart, reloadFromStorage]);
 
   useEffect(() => {
     if (!paymentRules) return;
@@ -251,7 +263,7 @@ function CheckoutContent() {
       }
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
       setOrderNumber(data.order?.orderNumber ?? null);
-      if (fromCart) clearCart();
+      clearCart();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -260,6 +272,7 @@ function CheckoutContent() {
   }
 
   const hasCheckoutItems = fromCart || (productId && product);
+  const waitingForCart = !productId && !cartReady;
   if (loading && !fromCart) {
     return (
       <div className="min-h-screen bg-base-200 flex flex-col">
@@ -275,6 +288,25 @@ function CheckoutContent() {
         </header>
         <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1">
           <span className="loading loading-spinner mx-auto block w-10" />
+        </main>
+      </div>
+    );
+  }
+  if (waitingForCart) {
+    return (
+      <div className="min-h-screen bg-base-200 flex flex-col">
+        <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
+          <div className="navbar-start shrink-0 min-w-0 max-w-[50%]">
+            <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
+          </div>
+          <div className="navbar-end shrink-0 flex-nowrap gap-1">
+            <CartLink />
+            <ThemeSwitcher />
+            <LocaleSwitcher />
+          </div>
+        </header>
+        <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1 flex items-center justify-center">
+          <span className="loading loading-spinner w-10" />
         </main>
       </div>
     );
