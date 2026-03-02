@@ -3,7 +3,8 @@ import { prisma } from '@/lib/db';
 import { getPaymentRules } from '@/lib/rules-engine';
 import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
 import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
-import { isPaymentAcceptedCurrency, shippingInCurrency, convertToXOF } from '@/lib/currency';
+import { isPaymentAcceptedCurrency, convertToXOF } from '@/lib/currency';
+import { getShippingAmountXOF, shippingInCurrency } from '@/lib/shipping';
 import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -141,7 +142,8 @@ export async function POST(request: NextRequest) {
     }, 0);
     const productCurrency = (products[0].currency as string) || 'XOF';
     currency = productCurrency;
-    shippingAmount = shippingInCurrency(productCurrency);
+    const shippingXOF = await getShippingAmountXOF(companyId ?? undefined);
+    shippingAmount = shippingInCurrency(shippingXOF, productCurrency);
     total = subtotal + shippingAmount;
   }
 

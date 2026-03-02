@@ -16,11 +16,10 @@ import {
   PAYMENT_ACCEPTED_CURRENCIES,
   isPaymentAcceptedCurrency,
   convertToXOF,
-  shippingInCurrency,
-  SHIPPING_AMOUNT_XOF,
 } from '@/lib/currency';
+import { useShippingFee } from '@/hooks/useShippingFee';
 
-type ProductInfo = { id: string; name: string; price: number; currency: string };
+type ProductInfo = { id: string; name: string; price: number; currency: string; companyProfileId?: string };
 type PaymentMode = 'FULL_UPFRONT' | 'PARTIAL_ADVANCE' | 'PAY_ON_DELIVERY';
 
 function CheckoutContent() {
@@ -54,12 +53,15 @@ function CheckoutContent() {
   const [conversionAccepted, setConversionAccepted] = useState(false);
 
   const firstProductId = productId ?? cartItems[0]?.productId;
+  const companyId = fromCart ? cartItems[0]?.companyProfileId : product?.companyProfileId;
+  const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
   const paymentRules = usePaymentRules(firstProductId ? { productId: firstProductId } : undefined);
+  const shippingFee = useShippingFee(companyId ? { companyId, currency: productCurrency } : undefined);
 
   useEffect(() => {
-    const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
+    const curr = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
     const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
-    if (!requiresPayment || isPaymentAcceptedCurrency(productCurrency)) {
+    if (!requiresPayment || isPaymentAcceptedCurrency(curr)) {
       setConversionAccepted(false);
     }
   }, [product, paymentMode, fromCart, cartItems]);
@@ -82,6 +84,7 @@ function CheckoutContent() {
           name: p.name,
           price: Number(p.price),
           currency: String(p.currency ?? CANONICAL_CURRENCY).trim().toUpperCase(),
+          companyProfileId: p.companyProfileId,
         })
       )
       .finally(() => setLoading(false));
@@ -185,10 +188,10 @@ function CheckoutContent() {
       ? cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity }))
       : productId && product ? [{ productId, quantity }] : [];
     if (items.length === 0) return;
-    const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
+    const curr = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
     const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
     const needsConversion =
-      requiresPayment && !isPaymentAcceptedCurrency(productCurrency);
+      requiresPayment && !isPaymentAcceptedCurrency(curr);
     if (needsConversion && !conversionAccepted) {
       setError(t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'));
       return;
@@ -221,17 +224,17 @@ function CheckoutContent() {
         items,
         shippingAddress: ship,
         paymentMode,
-        currency: needsConversion ? CANONICAL_CURRENCY : productCurrency,
+        currency: needsConversion ? CANONICAL_CURRENCY : curr,
       };
       if (paymentMode === 'PARTIAL_ADVANCE') {
         body.advancePercent = (rulesOverride?.minAdvancePercent ?? 30);
       }
       if (needsConversion) {
         const cartSubtotal = fromCart ? cartItems.reduce((s, i) => s + i.price * i.quantity, 0) : product!.price * quantity;
-        const subtotalXOF = Math.round(convertToXOF(cartSubtotal, productCurrency));
+        const subtotalXOF = Math.round(convertToXOF(cartSubtotal, curr));
         body.subtotal = subtotalXOF;
-        body.shippingAmount = SHIPPING_AMOUNT_XOF;
-        body.total = subtotalXOF + SHIPPING_AMOUNT_XOF;
+        body.shippingAmount = shippingXOF;
+        body.total = subtotalXOF + shippingXOF;
       }
       if (isGuest) {
         body.guestEmail = email.trim();
@@ -239,7 +242,13 @@ function CheckoutContent() {
         body.guestLastName = lastName.trim().slice(0, 100) || null;
       }
       const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { error?: string; order?: { orderNumber?: string } } = {};
+      try {
+        if (text) data = JSON.parse(text);
+      } catch {
+        data = { error: 'Réponse serveur invalide' };
+      }
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
       setOrderNumber(data.order?.orderNumber ?? null);
       if (fromCart) clearCart();
@@ -328,15 +337,15 @@ function CheckoutContent() {
     );
   }
 
-  const productCurrency = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product!.currency ?? CANONICAL_CURRENCY);
   const subtotal = fromCart ? cartItems.reduce((s, i) => s + i.price * i.quantity, 0) : product!.price * quantity;
-  const shippingAmount = shippingInCurrency(productCurrency);
+  const shippingAmount = shippingFee?.amountInCurrency ?? 0;
   const total = subtotal + shippingAmount;
   const needsConversion =
     (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') &&
     !isPaymentAcceptedCurrency(productCurrency);
   const subtotalXOF = needsConversion ? Math.round(convertToXOF(subtotal, productCurrency)) : 0;
-  const totalXOF = needsConversion ? subtotalXOF + SHIPPING_AMOUNT_XOF : 0;
+  const shippingXOF = shippingFee?.amountXOF ?? 0;
+  const totalXOF = needsConversion ? subtotalXOF + shippingXOF : 0;
   const advanceXOF =
     needsConversion && paymentMode === 'PARTIAL_ADVANCE'
       ? Math.round((totalXOF * (rulesOverride?.minAdvancePercent ?? 30)) / 100)

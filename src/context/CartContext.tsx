@@ -9,6 +9,7 @@ export type CartItem = {
   currency: string;
   quantity: number;
   slug?: string;
+  companyProfileId?: string;
 };
 
 const STORAGE_KEY = 'ecommerce_cart';
@@ -30,6 +31,7 @@ function normalizeCart(items: CartItem[]): CartItem[] {
         currency: typeof it.currency === 'string' ? it.currency : 'XOF',
         quantity: Math.max(1, Math.min(999, it.quantity || 1)),
         slug: typeof it.slug === 'string' ? it.slug : undefined,
+        companyProfileId: typeof it.companyProfileId === 'string' ? it.companyProfileId : undefined,
       });
     }
   }
@@ -59,6 +61,7 @@ function saveToStorage(items: CartItem[]) {
       currency: i.currency,
       quantity: i.quantity,
       slug: i.slug ?? undefined,
+      companyProfileId: i.companyProfileId ?? undefined,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     window.dispatchEvent(new Event('cart-update'));

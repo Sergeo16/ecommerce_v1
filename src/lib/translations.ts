@@ -219,6 +219,13 @@ export const translations = {
     adminNotificationWhatsApp: 'WhatsApp',
     adminNotificationEmailOverride: 'Email de notification (optionnel)',
     adminNotificationWhatsAppOverride: 'Numéro WhatsApp (optionnel)',
+    deliveryFeesTitle: 'Frais de livraison',
+    deliveryFeesDesc: 'Montant par défaut appliqué à toutes les commandes. Vous pouvez définir un override par fournisseur ou mettre 0 pour la livraison gratuite.',
+    deliveryFeeDefault: 'Montant par défaut (XOF)',
+    deliveryFeeFree: 'Gratuit',
+    deliveryFeePerSupplier: 'Par fournisseur',
+    deliveryFeePerSupplierDesc: 'Laissez vide pour utiliser le montant par défaut. Saisissez 0 pour la livraison gratuite pour ce fournisseur.',
+    deliveryFeeOverride: 'Override (XOF)',
   },
   en: {
     appName: 'Centre Commercial',
@@ -436,6 +443,13 @@ export const translations = {
     adminNotificationWhatsApp: 'WhatsApp',
     adminNotificationEmailOverride: 'Notification email (optional)',
     adminNotificationWhatsAppOverride: 'WhatsApp number (optional)',
+    deliveryFeesTitle: 'Delivery fees',
+    deliveryFeesDesc: 'Default amount applied to all orders. You can set an override per supplier or 0 for free delivery.',
+    deliveryFeeDefault: 'Default amount (XOF)',
+    deliveryFeeFree: 'Free',
+    deliveryFeePerSupplier: 'Per supplier',
+    deliveryFeePerSupplierDesc: 'Leave empty to use the default amount. Enter 0 for free delivery for this supplier.',
+    deliveryFeeOverride: 'Override (XOF)',
   },
 } as const;
 

@@ -231,6 +231,7 @@ export default function CatalogPage() {
                         currency: p.currency ?? 'XOF',
                         quantity: 1,
                         slug: p.slug,
+                        companyProfileId: (p as { companyProfileId?: string }).companyProfileId,
                       })
                     }
                     title={t('addToCart')}

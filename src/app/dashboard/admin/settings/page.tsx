@@ -41,13 +41,17 @@ export default function AdminSettingsPage() {
   const [notifWhatsApp, setNotifWhatsApp] = useState(false);
   const [notifEmailOverride, setNotifEmailOverride] = useState('');
   const [notifWhatsAppOverride, setNotifWhatsAppOverride] = useState('');
+  const [deliveryFeeDefault, setDeliveryFeeDefault] = useState(2000);
+  const [deliveryFeeSuppliers, setDeliveryFeeSuppliers] = useState<Record<string, number>>({});
+  const [suppliers, setSuppliers] = useState<{ id: string; companyName: string }[]>([]);
 
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
     Promise.all([
       fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
       fetch('/api/admin/maintenance').then((r) => r.json()),
-    ]).then(([data, maintenanceData]) => {
+      fetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : []),
+    ]).then(([data, maintenanceData, suppliersList]) => {
       const pm = (data.payment_modes as PaymentModes) ?? {};
       setFullUpfront(pm.fullUpfront ?? true);
       setPartialAdvance(pm.partialAdvance ?? true);
@@ -76,6 +80,11 @@ export default function AdminSettingsPage() {
         const codes = curList.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim().toUpperCase());
         setAllowedCurrencies(codes.includes('XOF') ? codes : ['XOF', ...codes]);
       }
+      const def = data.delivery_fee_default;
+      setDeliveryFeeDefault(typeof def === 'number' && def >= 0 ? def : 2000);
+      const sup = data.delivery_fee_suppliers;
+      setDeliveryFeeSuppliers((typeof sup === 'object' && sup !== null ? sup : {}) as Record<string, number>);
+      setSuppliers(Array.isArray(suppliersList) ? suppliersList : []);
     })
     .catch(() => setMessage('error'))
     .finally(() => setLoading(false));
@@ -129,6 +138,8 @@ export default function AdminSettingsPage() {
       await putSetting('admin_notification_email', notifEmailOverride.trim() || '');
       await putSetting('admin_notification_whatsapp_phone', notifWhatsAppOverride.trim() || '');
       await putSetting('allowed_currencies', allowedCurrencies.length > 0 ? allowedCurrencies : ['XOF']);
+      await putSetting('delivery_fee_default', deliveryFeeDefault);
+      await putSetting('delivery_fee_suppliers', deliveryFeeSuppliers);
       setMessage('saved');
       setTimeout(() => setMessage(null), 3000);
     } catch {
@@ -328,6 +339,79 @@ export default function AdminSettingsPage() {
             </label>
           </div>
 
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('deliveryFeesTitle')}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('deliveryFeesDesc')}</p>
+            <div className="space-y-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">{t('deliveryFeeDefault')}</span>
+                </label>
+                <div className="flex flex-wrap gap-3 items-center">
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    className="input input-bordered w-28"
+                    value={deliveryFeeDefault}
+                    onChange={(e) => setDeliveryFeeDefault(Math.max(0, Number(e.target.value) || 0))}
+                  />
+                  <span className="text-sm">XOF</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm"
+                      checked={deliveryFeeDefault === 0}
+                      onChange={(e) => setDeliveryFeeDefault(e.target.checked ? 0 : 2000)}
+                    />
+                    <span className="text-sm">{t('deliveryFeeFree')}</span>
+                  </label>
+                </div>
+              </div>
+              {suppliers.length > 0 && (
+                <div>
+                  <h3 className="font-medium mb-2">{t('deliveryFeePerSupplier')}</h3>
+                  <p className="text-sm opacity-70 mb-2">{t('deliveryFeePerSupplierDesc')}</p>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>{t('companyName')}</th>
+                          <th>{t('deliveryFeeOverride')} (XOF)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {suppliers.map((s) => (
+                          <tr key={s.id}>
+                            <td>{s.companyName}</td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                step={100}
+                                className="input input-bordered input-sm w-24"
+                                placeholder="—"
+                                value={deliveryFeeSuppliers[s.id] ?? ''}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setDeliveryFeeSuppliers((prev) => {
+                                    const next = { ...prev };
+                                    if (v === '' || v === null) delete next[s.id];
+                                    else next[s.id] = Math.max(0, Number(v) || 0);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
             <h2 className="font-semibold text-lg mb-2">{t('adminNotificationChannels')}</h2>
             <p className="text-sm opacity-80 mb-4">{t('adminNotificationChannelsDesc')}</p>

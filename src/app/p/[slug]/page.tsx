@@ -266,6 +266,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                     currency: product.currency ?? 'XOF',
                     quantity,
                     slug,
+                    companyProfileId: (product as { companyProfileId?: string }).companyProfileId,
                   })
                 }
               >
