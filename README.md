@@ -35,7 +35,8 @@ npm run dev
 ## Paiement
 
 - Total avant livraison, partiel (avance + solde), à la livraison — configurable par Admin (produit, fournisseur, pays, user)
-- Méthodes : Stripe, Mobile Money (MTN/Moov), wallet, cash on delivery
+- **KKiaPay** (1er moyen Mobile Money intégré) : MTN Mobile Money, Moov Money, cartes (Visa, Mastercard) — Bénin et région. Si les clés KKiaPay sont configurées dans `.env`, le checkout utilise le widget KKiaPay pour les paiements en XOF (total ou acompte). Vérification obligatoire côté serveur (anti-fraude). Voir [Intégration KKiaPay](#intégration-kkiapay) ci-dessous.
+- Méthodes additionnelles : Stripe, wallet, cash on delivery (mock Mobile Money si KKiaPay non configuré).
 
 ## Livraison
 
@@ -81,6 +82,43 @@ npm run dev
 ## Thèmes DaisyUI
 
 dark, business, corporate, luxury, cyberpunk — switch dans le dashboard, sauvegardé en local.
+
+## Intégration KKiaPay
+
+[KKiaPay](https://kkiapay.me) est l’agrégateur de paiement Mobile Money (MTN, Moov) et cartes utilisé en priorité pour les paiements en XOF.
+
+### Références
+
+- [Documentation KKiaPay](https://docs.kkiapay.me/v1/)
+- [SDK JavaScript (widget)](https://docs.kkiapay.me/v1/plugin-et-sdk/sdk-javascript) — chargement du script, `openKkiapayWidget`, `addSuccessListener` / `addFailedListener`
+- [SDK serveur (Node.js)](https://docs.kkiapay.me/v1/plugin-et-sdk/admin-sdks-server-side) — vérification des transactions côté API
+- [Sécurité](https://docs.kkiapay.me/v1/securite/untitled) — HTTPS, chiffrement, vérification obligatoire des transactions
+- [Création de compte](https://docs.kkiapay.me/v1/compte/creation-dun-compte) — inscription KKiaPay
+- [Méthodes de paiement](https://docs.kkiapay.me/v1/paiements/methodes-de-paiement) — Mobile Money, cartes
+- [Sandbox / test](https://docs.kkiapay.me/v1/compte/kkiapay-sandbox-guide-de-test) — mode test et numéros de téléphone de test
+
+### Configuration (.env)
+
+Récupérer les clés dans le [tableau de bord KKiaPay](https://kkiapay.me) → **Développeurs** → **Clés API**.
+
+| Variable | Description |
+|----------|-------------|
+| `KKIAPAY_PUBLIC_KEY` | Clé API publique (affichée dans le widget côté client) |
+| `KKIAPAY_PRIVATE_KEY` | Clé privée (serveur uniquement) |
+| `KKIAPAY_SECRET_KEY` | Clé secrète (serveur uniquement) |
+| `KKIAPAY_SANDBOX` | `true` pour le mode test, `false` en production |
+
+Si les trois clés sont renseignées, le checkout propose automatiquement le paiement via KKiaPay pour les commandes en **XOF** (paiement total ou acompte). Sinon, le flux Mobile Money mock est utilisé.
+
+### Flux technique
+
+1. **Checkout** : l’utilisateur valide la commande (total ou acompte en XOF).
+2. **Création commande** : `POST /api/orders` avec `paymentGateway: "KKIAPAY"` crée une commande en statut `PENDING` et renvoie `orderNumber`, `amountToPay` et les paramètres KKiaPay (clé publique, sandbox).
+3. **Widget** : le front charge le script `https://cdn.kkiapay.me/k.js`, ouvre le widget KKiaPay (Mobile Money uniquement : `paymentmethod: "momo"`), avec montant et clé.
+4. **Succès** : `addSuccessListener` reçoit le `transactionId`. Le front appelle `POST /api/orders/verify-kkiapay` avec `orderNumber` et `transactionId`.
+5. **Vérification serveur** : l’API vérifie la transaction auprès de KKiaPay (SDK Node.js `k.verify(transactionId)`), met la commande en `CONFIRMED`, enregistre le paiement et déclenche les jobs (emails, livraison, commissions).
+
+Aucune commande n’est confirmée sans vérification côté serveur (recommandation KKiaPay anti-fraude).
 
 ## Scripts
 

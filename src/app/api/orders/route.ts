@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getPaymentRules } from '@/lib/rules-engine';
 import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
 import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
+import { isKkiapayConfigured, verifyKkiapayTransaction } from '@/lib/kkiapay';
 import { isPaymentAcceptedCurrency, convertToXOF } from '@/lib/currency';
 import { getShippingAmountXOF, shippingInCurrency } from '@/lib/shipping';
 import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
   const paymentMode = (body.paymentMode as PaymentModeOrder) ?? 'FULL_UPFRONT';
   const advancePercent = typeof body.advancePercent === 'number' ? body.advancePercent : null;
   const shippingAddress = body.shippingAddress && typeof body.shippingAddress === 'object' ? body.shippingAddress : null;
+  const paymentGateway = typeof body.paymentGateway === 'string' ? body.paymentGateway : null;
+  const useKkiapay = paymentGateway === 'KKIAPAY' && isKkiapayConfigured();
 
   const isGuest = !userId;
   const guestEmail = typeof body.guestEmail === 'string' ? body.guestEmail.trim() : '';
@@ -159,8 +162,79 @@ export async function POST(request: NextRequest) {
   const advance = paymentMode === 'FULL_UPFRONT' ? total : paymentMode === 'PARTIAL_ADVANCE' ? (total * (advancePercent ?? 30)) / 100 : 0;
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  // Étape 1 & 2 : initier paiement Mobile Money + vérifier succès
-  // (sauf pour paiement à la livraison où aucun paiement n'est requis avant la commande)
+  // KKiaPay : créer la commande en PENDING et renvoyer les infos pour ouvrir le widget (paiement après)
+  if (useKkiapay) {
+    const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
+    if (currency !== 'XOF') {
+      return NextResponse.json(
+        { error: 'Le paiement KKiaPay est en XOF. Passez par la conversion proposée sur la page de commande.' },
+        { status: 400 }
+      );
+    }
+    const phoneFromShipping =
+      shippingAddress && typeof (shippingAddress as { phone?: unknown }).phone === 'string'
+        ? String((shippingAddress as { phone?: string }).phone).trim()
+        : '';
+    if (!phoneFromShipping) {
+      return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
+    }
+
+    const order = await prisma.order.create({
+      data: {
+        orderNumber,
+        userId: userId ?? null,
+        guestEmail: isGuest ? guestEmail : null,
+        guestFirstName: isGuest ? guestFirstName : null,
+        guestLastName: isGuest ? guestLastName : null,
+        companyProfileId: companyId,
+        status: 'PENDING',
+        paymentMode,
+        advancePercent: advancePercent ?? null,
+        subtotal,
+        shippingAmount,
+        total,
+        advancePaid: 0,
+        balanceDue: total - advance,
+        currency,
+        affiliateLinkId,
+        shippingAddress,
+      },
+    });
+
+    const orderCurrency = currency;
+    const productCurrencies = new Map(products.map((p) => [p.id, (p.currency as string) || 'XOF']));
+    for (const i of items) {
+      const p = products.find((x) => x.id === i.productId)!;
+      const qty = Math.max(1, i.quantity || 1);
+      const productCurrency = productCurrencies.get(p.id) ?? 'XOF';
+      const unitPriceSource = Number(p.price);
+      const unitPrice =
+        orderCurrency === productCurrency
+          ? unitPriceSource
+          : Math.round(convertToXOF(unitPriceSource, productCurrency) * 100) / 100;
+      const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+      await prisma.orderItem.create({
+        data: {
+          orderId: order.id,
+          productId: p.id,
+          quantity: qty,
+          unitPrice,
+          total: lineTotal,
+          affiliateCommissionPercent: p.affiliateCommissionPercent,
+        },
+      });
+    }
+
+    const publicKey = process.env.KKIAPAY_PUBLIC_KEY ?? '';
+    const sandbox = process.env.KKIAPAY_SANDBOX === 'true';
+    return NextResponse.json({
+      order: { id: order.id, orderNumber: order.orderNumber },
+      amountToPay: Math.round(amountToPay),
+      kkiapay: { publicKey, sandbox },
+    });
+  }
+
+  // Étape 1 & 2 : initier paiement Mobile Money (mock/MTN) + vérifier succès
   let paidAmount = 0;
   let paymentMethod: PaymentMethod | null = null;
   let externalPaymentId: string | null = null;
@@ -181,7 +255,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
     }
 
-    // Pour l’instant, on passe par l’abstraction Mobile Money (à brancher sur KKIAPAY / FedaPay / BjPay / Stripe).
     const mmResult = await initiateMobileMoneyPayment({
       amount: Number(amountToPay),
       currency: 'XOF',

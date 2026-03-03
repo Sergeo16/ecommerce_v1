@@ -26,7 +26,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
   const { t } = useLocale();
-  const { items: cartItems, clearCart, isReady: cartReady, reloadFromStorage, restoreFromCheckoutBackup } = useCart();
+  const { items: cartItems, clearCart, isReady: cartReady, reloadFromStorage, restoreFromCheckoutBackup, backupForCheckout } = useCart();
   const productId = searchParams.get('productId');
   const qtyFromUrl = Math.max(1, Math.min(999, parseInt(searchParams.get('qty') ?? '1', 10)));
 
@@ -51,6 +51,8 @@ function CheckoutContent() {
   const [rulesOverride, setRulesOverride] = useState<PaymentRules | null>(null);
   /** Utilisateur accepte de payer en devise acceptée (XOF) après conversion quand la devise du produit ne l'est pas. */
   const [conversionAccepted, setConversionAccepted] = useState(false);
+  /** Config paiement (KKiaPay activé ou non). */
+  const [paymentConfig, setPaymentConfig] = useState<{ kkiapayEnabled: boolean } | null>(null);
 
   const firstProductId = productId ?? cartItems[0]?.productId;
   const companyId = fromCart ? cartItems[0]?.companyProfileId : product?.companyProfileId;
@@ -73,6 +75,17 @@ function CheckoutContent() {
       if (!restored) reloadFromStorage();
     }
   }, [orderNumber, productId, cartItems.length, cartReady, reloadFromStorage, restoreFromCheckoutBackup]);
+
+  // Sauvegarder le panier en backup à l’arrivée sur le checkout (si panier non vide) pour pouvoir restaurer en cas de remount
+  useEffect(() => {
+    if (!orderNumber && !productId && cartItems.length > 0) backupForCheckout();
+  }, [orderNumber, productId, cartItems.length, backupForCheckout]);
+
+  useEffect(() => {
+    fetch('/api/config/payment')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => c && setPaymentConfig({ kkiapayEnabled: !!c.kkiapayEnabled }));
+  }, []);
 
   useEffect(() => {
     if (orderNumber) clearCart();
@@ -118,8 +131,8 @@ function CheckoutContent() {
 
   const isGuest = !user;
 
-  // Pré-remplir le téléphone de l'utilisateur connecté avec la valeur fournie lors de l'inscription (s'il existe),
-  // tout en laissant le champ librement modifiable.
+  // Pré-remplir le téléphone uniquement si l'utilisateur en a fourni un à l'inscription (pas de placeholder type seed).
+  const placeholderPhone = '+22997000000';
   useEffect(() => {
     if (!user || !token) return;
     if (phone.trim()) return;
@@ -136,7 +149,8 @@ function CheckoutContent() {
         if (!res.ok) return;
         const data = await res.json();
         const fromProfile = (data?.phone ?? '').toString().trim();
-        if (!cancelled && fromProfile && !phone.trim()) {
+        const isRealPhone = fromProfile && fromProfile !== placeholderPhone;
+        if (!cancelled && isRealPhone && !phone.trim()) {
           setPhone(fromProfile.slice(0, 20));
         }
       } catch {
@@ -199,7 +213,12 @@ function CheckoutContent() {
     const items = fromCart
       ? cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity }))
       : productId && product ? [{ productId, quantity }] : [];
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      restoreFromCheckoutBackup();
+      reloadFromStorage();
+      setError(t('cartEmptyDesc'));
+      return;
+    }
     const curr = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
     const requiresPayment = paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE';
     const needsConversion =
@@ -253,17 +272,95 @@ function CheckoutContent() {
         body.guestFirstName = firstName.trim().slice(0, 100) || null;
         body.guestLastName = lastName.trim().slice(0, 100) || null;
       }
+      const currencyForPayment = needsConversion ? CANONICAL_CURRENCY : curr;
+      if (requiresPayment && paymentConfig?.kkiapayEnabled && currencyForPayment === 'XOF') {
+        body.paymentGateway = 'KKIAPAY';
+      }
       const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) });
       const text = await res.text();
-      let data: { error?: string; order?: { orderNumber?: string } } = {};
+      let data: {
+        error?: string;
+        order?: { orderNumber?: string; id?: string };
+        amountToPay?: number;
+        kkiapay?: { publicKey: string; sandbox: boolean };
+      } = {};
       try {
         if (text) data = JSON.parse(text);
       } catch {
         data = { error: 'Réponse serveur invalide' };
       }
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
-      setOrderNumber(data.order?.orderNumber ?? null);
-      clearCart();
+
+      if (data.kkiapay?.publicKey && data.order?.orderNumber && typeof data.amountToPay === 'number') {
+        const win = typeof window !== 'undefined' ? window : undefined;
+        if (!win) throw new Error('Environnement navigateur requis');
+        const scriptId = 'kkiapay-sdk';
+        if (!document.getElementById(scriptId)) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://cdn.kkiapay.me/k.js';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Chargement KKiaPay impossible'));
+            document.body.appendChild(script);
+          });
+        }
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            try {
+              (win as unknown as { removeSuccessListener?: () => void }).removeSuccessListener?.();
+              (win as unknown as { removeFailedListener?: () => void }).removeFailedListener?.();
+            } catch {}
+          };
+          (win as unknown as { addSuccessListener?: (cb: (r: { transactionId?: string }) => void) => void }).addSuccessListener?.((response: { transactionId?: string }) => {
+            cleanup();
+            const txId = response?.transactionId ?? (response as unknown as Record<string, string>)?.transaction_id;
+            if (!txId) {
+              setError('Réponse de paiement invalide');
+              setSubmitting(false);
+              reject(new Error('transactionId manquant'));
+              return;
+            }
+            (async () => {
+              try {
+                const verifyRes = await fetch('/api/orders/verify-kkiapay', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                  body: JSON.stringify({ orderNumber: data.order!.orderNumber, transactionId: txId }),
+                });
+                const verifyData = await verifyRes.json().catch(() => ({}));
+                if (!verifyRes.ok) throw new Error(verifyData.error ?? 'Vérification échouée');
+                setOrderNumber(data.order!.orderNumber ?? null);
+                clearCart();
+                resolve();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Vérification échouée');
+                reject(e);
+              } finally {
+                setSubmitting(false);
+              }
+            })();
+          });
+          (win as unknown as { addFailedListener?: (cb: (err: unknown) => void) => void }).addFailedListener?.((err: unknown) => {
+            cleanup();
+            setError(err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : t('paymentFailed') ?? 'Paiement échoué');
+            setSubmitting(false);
+            reject(err);
+          });
+          (win as unknown as { openKkiapayWidget?: (opts: Record<string, unknown>) => void }).openKkiapayWidget?.({
+            amount: String(data.amountToPay),
+            key: data.kkiapay!.publicKey,
+            sandbox: data.kkiapay!.sandbox,
+            position: 'center',
+            paymentmethod: 'momo',
+            theme: 'green',
+          });
+        });
+      } else {
+        setOrderNumber(data.order?.orderNumber ?? null);
+        clearCart();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -273,6 +370,37 @@ function CheckoutContent() {
 
   const hasCheckoutItems = fromCart || (productId && product);
   const waitingForCart = !productId && !cartReady;
+
+  // Succès de commande : afficher en priorité (même si le panier a été vidé après commande depuis le panier)
+  if (orderNumber) {
+    return (
+      <div className="min-h-screen bg-base-200 flex flex-col">
+        <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
+          <div className="navbar-start shrink-0 min-w-0 max-w-[50%]">
+            <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
+          </div>
+          <div className="navbar-end shrink-0 flex-nowrap gap-1">
+            <CartLink />
+            <ThemeSwitcher />
+            <LocaleSwitcher />
+          </div>
+        </header>
+        <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1 max-w-md mx-auto text-center">
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body">
+              <h1 className="card-title text-xl justify-center text-success">{t('orderSuccess')}</h1>
+              <p className="font-mono font-bold">{t('orderNumberLabel')}: {orderNumber}</p>
+              <p className="text-sm opacity-80">
+                {isGuest ? 'Un récapitulatif a été envoyé à votre email.' : ''}
+              </p>
+              <Link href="/catalog" className="btn btn-primary mt-4">{t('catalog')}</Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (loading && !fromCart) {
     return (
       <div className="min-h-screen bg-base-200 flex flex-col">
@@ -333,35 +461,6 @@ function CheckoutContent() {
                 <Link href="/cart" className="btn btn-outline">{t('cart')}</Link>
                 <Link href="/catalog" className="btn btn-primary">{t('catalog')}</Link>
               </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (orderNumber) {
-    return (
-      <div className="min-h-screen bg-base-200 flex flex-col">
-        <header className="navbar bg-base-100 px-2 sm:px-4 min-h-12 py-1 gap-1 flex-nowrap overflow-x-hidden w-full max-w-full">
-          <div className="navbar-start shrink-0 min-w-0 max-w-[50%]">
-            <AppLogo className="btn btn-ghost btn-sm px-1 truncate max-w-[130px] sm:max-w-none" />
-          </div>
-          <div className="navbar-end shrink-0 flex-nowrap gap-1">
-            <CartLink />
-            <ThemeSwitcher />
-            <LocaleSwitcher />
-          </div>
-        </header>
-        <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0 flex-1 max-w-md mx-auto text-center">
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h1 className="card-title text-xl justify-center text-success">{t('orderSuccess')}</h1>
-              <p className="font-mono font-bold">{t('orderNumberLabel')}: {orderNumber}</p>
-              <p className="text-sm opacity-80">
-                {isGuest ? 'Un récapitulatif a été envoyé à votre email.' : ''}
-              </p>
-              <Link href="/catalog" className="btn btn-primary mt-4">{t('catalog')}</Link>
             </div>
           </div>
         </main>
@@ -606,11 +705,12 @@ function CheckoutContent() {
             />
             <input
               type="tel"
-              placeholder={t('phone')}
+              placeholder={`${t('phoneLabel')} *`}
               className="input input-bordered w-full min-w-0"
               value={phone}
               onChange={(e) => setPhone(e.target.value.slice(0, 20))}
               maxLength={20}
+              required
             />
             {error && <div className="alert alert-error text-sm break-words">{error}</div>}
             <button

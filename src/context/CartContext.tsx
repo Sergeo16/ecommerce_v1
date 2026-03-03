@@ -115,8 +115,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch {}
-    setItems([]);
-    saveToStorage([]);
+    // Sans backup : charger le panier depuis localStorage au lieu de le vider (évite de perdre le panier au remount / navigation)
+    const loaded = loadFromStorage();
+    setItems(loaded);
     try {
       sessionStorage.removeItem(CHECKOUT_BACKUP_KEY);
     } catch {}
