@@ -130,13 +130,26 @@ export default function RegisterPage() {
           body.addressLat = addressCoords.lat;
           body.addressLng = addressCoords.lng;
         }
+      } else {
+        body.address = address.trim() || undefined;
+        body.city = city.trim() || undefined;
+        if (addressCoords) {
+          body.addressLat = addressCoords.lat;
+          body.addressLng = addressCoords.lng;
+        }
       }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { error?: string } = {};
+      try {
+        if (text) data = JSON.parse(text);
+      } catch {
+        data = { error: t('registerError') };
+      }
       if (!res.ok) throw new Error(data.error ?? t('registerError'));
       await login(email, password);
       router.push('/dashboard');
@@ -325,6 +338,45 @@ export default function RegisterPage() {
                   value={city}
                   onChange={(e) => setCity(e.target.value.slice(0, 100))}
                   maxLength={100}
+                />
+              </>
+            )}
+            {!isSupplier && (
+              <>
+                <div className="divider text-sm">{t('addressOptional')}</div>
+                <div className="flex flex-wrap gap-2 items-start">
+                  <input
+                    type="text"
+                    placeholder={t('address')}
+                    className="input input-bordered flex-1 min-w-0"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value.slice(0, 300))}
+                    maxLength={300}
+                    autoComplete="street-address"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm gap-1 shrink-0"
+                    onClick={handleUseMyLocation}
+                    disabled={locationLoading}
+                    title={t('useMyLocation')}
+                  >
+                    {locationLoading ? <span className="loading loading-spinner loading-sm" /> : '📍'}
+                    <span className="hidden sm:inline">{t('useMyLocation')}</span>
+                  </button>
+                </div>
+                {addressCoords && (
+                  <p className="text-sm text-success">✓ {t('locationSuccess')}: {addressCoords.lat.toFixed(5)}, {addressCoords.lng.toFixed(5)}</p>
+                )}
+                {locationError && <p className="text-sm text-error">{locationError}</p>}
+                <input
+                  type="text"
+                  placeholder={t('city')}
+                  className="input input-bordered w-full min-w-0"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                  autoComplete="address-level2"
                 />
               </>
             )}

@@ -38,6 +38,10 @@ model User {
   avatarUrl     String?     @map("avatar_url")
   locale        String      @default("fr")
   timezone      String      @default("Africa/Porto-Novo")
+  address       String?
+  city          String?
+  addressLat    Decimal?    @map("address_lat") @db.Decimal(10, 7)
+  addressLng    Decimal?    @map("address_lng") @db.Decimal(10, 7)
   lastLoginAt   DateTime?   @map("last_login_at")
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
@@ -399,22 +403,24 @@ model CourierProfile {
 }
 
 model Delivery {
-  id              String         @id @default(cuid())
-  orderId         String         @unique @map("order_id")
-  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  courierId       String?        @map("courier_id")
-  courier         User?          @relation("DeliveryCourier", fields: [courierId], references: [id], onDelete: SetNull)
-  status          DeliveryStatus @default(PENDING)
-  pickupAddress   Json?          @map("pickup_address")
-  deliveryAddress Json           @map("delivery_address")
-  commissionAmount Decimal?      @map("commission_amount") @db.Decimal(12, 2)
-  proofPhotoUrl   String?        @map("proof_photo_url")
-  signatureUrl    String?        @map("signature_url")
-  notes           String?        @db.Text
-  pickedUpAt      DateTime?      @map("picked_up_at")
-  deliveredAt     DateTime?      @map("delivered_at")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
+  id                   String         @id @default(cuid())
+  orderId              String         @unique @map("order_id")
+  order                Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId            String?        @map("courier_id")
+  courier              User?          @relation("DeliveryCourier", fields: [courierId], references: [id], onDelete: SetNull)
+  externalCourierName  String?        @map("external_courier_name")
+  externalCourierPhone String?        @map("external_courier_phone")
+  status               DeliveryStatus @default(PENDING)
+  pickupAddress        Json?          @map("pickup_address")
+  deliveryAddress      Json           @map("delivery_address")
+  commissionAmount     Decimal?       @map("commission_amount") @db.Decimal(12, 2)
+  proofPhotoUrl        String?        @map("proof_photo_url")
+  signatureUrl         String?        @map("signature_url")
+  notes                String?        @db.Text
+  pickedUpAt           DateTime?      @map("picked_up_at")
+  deliveredAt          DateTime?      @map("delivered_at")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
 
   @@index([courierId])
   @@map("deliveries")

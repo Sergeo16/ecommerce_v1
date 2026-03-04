@@ -3,8 +3,9 @@ import { prisma } from '@/lib/db';
 import { getPaymentRules } from '@/lib/rules-engine';
 import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
 import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
-import { isKkiapayConfigured, verifyKkiapayTransaction } from '@/lib/kkiapay';
-import { isPaymentAcceptedCurrency, convertToXOF } from '@/lib/currency';
+import { isKkiapayConfigured } from '@/lib/kkiapay';
+import { CANONICAL_CURRENCY, isPaymentAcceptedCurrency, convertToXOF, normalizeCurrencyCode } from '@/lib/currency';
+import { sanitizeShippingAddress, validateShippingAddress, sanitizeEmail } from '@/lib/validate-fields';
 import { getShippingAmountXOF, shippingInCurrency } from '@/lib/shipping';
 import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
 
@@ -88,8 +89,21 @@ export async function POST(request: NextRequest) {
   if (items.length === 0 || !shippingAddress) {
     return NextResponse.json({ error: 'items et shippingAddress requis' }, { status: 400 });
   }
+  const shippingValid = validateShippingAddress(shippingAddress);
+  if (!shippingValid.ok) {
+    return NextResponse.json({ error: shippingValid.message ?? 'Adresse invalide' }, { status: 400 });
+  }
+  const shipping = sanitizeShippingAddress(shippingAddress);
+  const shippingForDb: Record<string, unknown> = {
+    address: shipping.address,
+    city: shipping.city,
+    ...(shipping.phone ? { phone: shipping.phone } : {}),
+    ...(shipping.lat != null ? { lat: shipping.lat } : {}),
+    ...(shipping.lng != null ? { lng: shipping.lng } : {}),
+  };
+  const guestEmailToStore = isGuest ? sanitizeEmail(guestEmail) : null;
   if (isGuest) {
-    if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+    if (!guestEmailToStore || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmailToStore)) {
       return NextResponse.json({ error: 'guestEmail valide requis pour achat invité' }, { status: 400 });
     }
   }
@@ -165,16 +179,13 @@ export async function POST(request: NextRequest) {
   // KKiaPay : créer la commande en PENDING et renvoyer les infos pour ouvrir le widget (paiement après)
   if (useKkiapay) {
     const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
-    if (currency !== 'XOF') {
+    if (normalizeCurrencyCode(currency) !== CANONICAL_CURRENCY) {
       return NextResponse.json(
         { error: 'Le paiement KKiaPay est en XOF. Passez par la conversion proposée sur la page de commande.' },
         { status: 400 }
       );
     }
-    const phoneFromShipping =
-      shippingAddress && typeof (shippingAddress as { phone?: unknown }).phone === 'string'
-        ? String((shippingAddress as { phone?: string }).phone).trim()
-        : '';
+    const phoneFromShipping = shipping.phone ?? '';
     if (!phoneFromShipping) {
       return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
     }
@@ -183,7 +194,7 @@ export async function POST(request: NextRequest) {
       data: {
         orderNumber,
         userId: userId ?? null,
-        guestEmail: isGuest ? guestEmail : null,
+        guestEmail: guestEmailToStore,
         guestFirstName: isGuest ? guestFirstName : null,
         guestLastName: isGuest ? guestLastName : null,
         companyProfileId: companyId,
@@ -197,7 +208,7 @@ export async function POST(request: NextRequest) {
         balanceDue: total - advance,
         currency,
         affiliateLinkId,
-        shippingAddress,
+        shippingAddress: shippingForDb,
       },
     });
 
@@ -241,16 +252,13 @@ export async function POST(request: NextRequest) {
 
   if (paymentMode === 'FULL_UPFRONT' || paymentMode === 'PARTIAL_ADVANCE') {
     const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
-    if (currency !== 'XOF') {
+    if (normalizeCurrencyCode(currency) !== CANONICAL_CURRENCY) {
       return NextResponse.json(
         { error: 'Le paiement Mobile Money est en XOF. Passez par la conversion proposée sur la page de commande.' },
         { status: 400 }
       );
     }
-    const phoneFromShipping =
-      shippingAddress && typeof (shippingAddress as { phone?: unknown }).phone === 'string'
-        ? String((shippingAddress as { phone?: string }).phone).trim()
-        : '';
+    const phoneFromShipping = shipping.phone ?? '';
     if (!phoneFromShipping) {
       return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
     }
@@ -282,7 +290,7 @@ export async function POST(request: NextRequest) {
     data: {
       orderNumber,
       userId: userId ?? null,
-      guestEmail: isGuest ? guestEmail : null,
+      guestEmail: guestEmailToStore,
       guestFirstName: isGuest ? guestFirstName : null,
       guestLastName: isGuest ? guestLastName : null,
       companyProfileId: companyId,
@@ -296,7 +304,7 @@ export async function POST(request: NextRequest) {
       balanceDue: total - paidAmount,
       currency,
       affiliateLinkId,
-      shippingAddress,
+      shippingAddress: shippingForDb,
     },
   });
 

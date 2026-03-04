@@ -42,6 +42,8 @@ npm run dev
 
 - Zones, tarifs (fixe / par distance / gratuit)
 - Statuts : PENDING → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED / FAILED / RETURNED
+- **Notification admin à chaque commande** : l’admin reçoit une notification (plateforme, et optionnellement email / WhatsApp selon Paramètres > Notifications des commandes) avec tous les détails utiles pour confier la livraison : client, adresse et téléphone de livraison, fournisseur et contact, liste des articles, total.
+- **Confier la livraison** : depuis Dashboard Admin > Commandes, l’admin peut cliquer « Confier livraison » pour chaque commande. Il peut assigner soit un **livreur enregistré** sur la plateforme, soit un **contact externe** (nom + téléphone) s’il n’y a pas de livreur disponible ou proche du fournisseur. L’assignation est enregistrée (livreur plateforme ou champs `externalCourierName` / `externalCourierPhone`).
 - **Suivi livraison** : activable/désactivable par le Super Admin (Paramètres globaux). Quand activé, l’admin, le fournisseur et le client peuvent suivre la livraison via `GET /api/tracking/[orderId]` (authentification requise, accès restreint au commande concernée).
 
 ## Mode maintenance

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, signAccessToken, signRefreshToken } from '@/lib/auth';
+import { sanitizeAddress, sanitizeCity, sanitizeLat, sanitizeLng } from '@/lib/validate-fields';
 import type { Role } from '@prisma/client';
 import { z } from 'zod';
 
@@ -59,6 +60,11 @@ export async function POST(request: NextRequest) {
   const userLastName = role === 'SUPPLIER' && !safeLastName ? '' : (safeLastName || '—');
 
   const passwordHash = await hashPassword(password);
+  const userAddress = role !== 'SUPPLIER' ? (sanitizeAddress(address) || null) : null;
+  const userCity = role !== 'SUPPLIER' ? (sanitizeCity(city) || null) : null;
+  const userLat = role !== 'SUPPLIER' ? sanitizeLat(addressLat) : undefined;
+  const userLng = role !== 'SUPPLIER' ? sanitizeLng(addressLng) : undefined;
+
   const user = await prisma.user.create({
     data: {
       email: emailLower,
@@ -67,6 +73,10 @@ export async function POST(request: NextRequest) {
       lastName: userLastName,
       phone: phone ?? null,
       role: role as Role,
+      address: userAddress ?? undefined,
+      city: userCity ?? undefined,
+      addressLat: userLat,
+      addressLng: userLng,
     },
   });
 

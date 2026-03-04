@@ -17,14 +17,26 @@ export const RATE_TO_XOF: Record<string, number> = {
   USD: 600,
 };
 
+/** Normalise un libellé de devise vers un code canonique.
+ * Exemple : "CFA", "F CFA", "FCFA" → "XOF".
+ */
+export function normalizeCurrencyCode(input: string): string {
+  const raw = String(input ?? '').trim().toUpperCase();
+  const compact = raw.replace(/\s+/g, '');
+  if (compact === 'CFA' || compact === 'FCFA') return 'XOF';
+  return compact;
+}
+
 /** Indique si la devise est acceptée pour le paiement en ligne. */
 export function isPaymentAcceptedCurrency(currency: string): boolean {
-  return PAYMENT_ACCEPTED_CURRENCIES.includes(String(currency).trim().toUpperCase());
+  const code = normalizeCurrencyCode(currency);
+  return PAYMENT_ACCEPTED_CURRENCIES.includes(code);
 }
 
 /** Convertit un montant de la devise source vers XOF. */
 export function convertToXOF(amount: number, fromCurrency: string): number {
-  const rate = RATE_TO_XOF[String(fromCurrency).trim().toUpperCase()] ?? 1;
+  const code = normalizeCurrencyCode(fromCurrency);
+  const rate = RATE_TO_XOF[code] ?? 1;
   return amount * rate;
 }
 
@@ -33,8 +45,9 @@ export const SHIPPING_AMOUNT_XOF = 2000;
 
 /** Livraison dans une autre devise : équivalent de SHIPPING_AMOUNT_XOF (pour affichage / commande en devise produit). */
 export function shippingInCurrency(currency: string): number {
-  if (currency.toUpperCase() === 'XOF') return SHIPPING_AMOUNT_XOF;
-  const rate = RATE_TO_XOF[currency.toUpperCase()];
+  const code = normalizeCurrencyCode(currency);
+  if (code === 'XOF') return SHIPPING_AMOUNT_XOF;
+  const rate = RATE_TO_XOF[code];
   if (!rate || rate <= 0) return SHIPPING_AMOUNT_XOF;
   return Math.round((SHIPPING_AMOUNT_XOF / rate) * 100) / 100;
 }
