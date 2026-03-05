@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppLogo } from '@/components/AppLogo';
@@ -30,12 +31,12 @@ export default function RegisterPage() {
   const [role, setRole] = useState<'CLIENT' | 'AFFILIATE' | 'SUPPLIER' | 'COURIER'>(
     roleParam === 'affiliate' ? 'AFFILIATE' : roleParam === 'supplier' ? 'SUPPLIER' : roleParam === 'courier' ? 'COURIER' : 'CLIENT'
   );
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
   const isSupplier = role === 'SUPPLIER';
+  const isCourier = role === 'COURIER';
 
   function validateEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -84,33 +85,36 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
     if (password.length < 8) {
-      setError(t('passwordMinError') ?? 'Mot de passe : minimum 8 caractères.');
+      toast.error(t('passwordMinError') ?? 'Mot de passe : minimum 8 caractères.');
       return;
     }
     if (password !== confirmPassword) {
-      setError(t('passwordMismatch') ?? 'Les deux mots de passe ne correspondent pas.');
+      toast.error(t('passwordMismatch') ?? 'Les deux mots de passe ne correspondent pas.');
       return;
     }
     if (!validateEmail(email.trim())) {
-      setError(t('emailInvalid') ?? 'Adresse email invalide.');
+      toast.error(t('emailInvalid') ?? 'Adresse email invalide.');
       return;
     }
     if (isSupplier) {
       if (!companyName.trim()) {
-        setError(t('companyNameRequiredSupplier'));
+        toast.error(t('companyNameRequiredSupplier'));
         return;
       }
       if (!phone.trim()) {
-        setError(t('phoneRequiredSupplier'));
+        toast.error(t('phoneRequiredSupplier'));
         return;
       }
       const hasAddressText = address.trim().length > 0 && city.trim().length > 0;
       if (!hasAddressText && !addressCoords) {
-        setError(t('addressRequiredSupplier'));
+        toast.error(t('addressRequiredSupplier'));
         return;
       }
+    }
+    if (isCourier && !phone.trim()) {
+      toast.error(t('phoneRequiredCourier') ?? 'Le numéro de téléphone est obligatoire pour les livreurs.');
+      return;
     }
     setLoading(true);
     try {
@@ -152,10 +156,11 @@ export default function RegisterPage() {
       }
       if (!res.ok) throw new Error(data.error ?? t('registerError'));
       await login(email, password);
+      toast.success(t('registerSuccess') ?? 'Inscription réussie. Bienvenue !');
       router.push('/dashboard');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('registerError'));
+      toast.error(err instanceof Error ? err.message : t('registerError'));
     } finally {
       setLoading(false);
     }
@@ -174,7 +179,6 @@ export default function RegisterPage() {
         <div className="card-body p-4 sm:p-6">
           <h1 className="card-title text-xl sm:text-2xl break-words">{t('signUp')}</h1>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {error && <div className="alert alert-error text-sm break-words">{error}</div>}
             <div className="form-control">
               <label className="label">{t('iAm')}</label>
               <select
@@ -296,10 +300,11 @@ export default function RegisterPage() {
             </div>
             <input
               type="tel"
-              placeholder={isSupplier ? `${t('phoneLabel')} *` : t('phone')}
+              placeholder={isSupplier || isCourier ? `${t('phoneLabel')} *` : t('phone')}
               className="input input-bordered w-full min-w-0"
               value={phone}
               onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+              required={isSupplier || isCourier}
               required={isSupplier}
               maxLength={20}
               autoComplete="tel"

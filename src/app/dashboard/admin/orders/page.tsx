@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -9,6 +10,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { sanitizeName, sanitizePhone, validatePhone, LIMITS } from '@/lib/validate-fields';
+import { deliveryStatusToKey, orderStatusToKey, type TranslationKey } from '@/lib/translations';
 
 type Order = {
   id: string;
@@ -23,6 +25,7 @@ type Order = {
   guestEmail?: string | null;
   companyProfile?: { companyName: string };
   items?: { product: { name: string }; quantity: number }[];
+  delivery?: { status: string; deliveredAt?: string | null; pickedUpAt?: string | null };
 };
 
 type OrderDetail = {
@@ -31,6 +34,8 @@ type OrderDetail = {
   status: string;
   total: number;
   currency: string;
+  createdAt?: string;
+  updatedAt?: string;
   shippingAddress: {
     address?: string;
     city?: string;
@@ -54,11 +59,21 @@ type OrderDetail = {
   delivery?: {
     id: string;
     status: string;
+    notes: string | null;
+    courierDecisionAt: string | null;
+    deliveredAt: string | null;
+    pickedUpAt: string | null;
+    createdAt?: string;
+    updatedAt?: string;
     courier?: { firstName: string; lastName: string; phone: string | null };
     externalCourierName: string | null;
     externalCourierPhone: string | null;
   } | null;
 };
+
+type HistoryEvent = { at: string; labelKey: TranslationKey; detail?: string };
+
+const COURIER_DECISION_STATUSES = ['COURIER_ACCEPTED', 'ON_HOLD', 'COURIER_REFUSED'];
 
 type CourierOption = { id: string; label: string; email: string; phone: string | null };
 
@@ -78,7 +93,9 @@ export default function AdminOrdersPage() {
   const [externalName, setExternalName] = useState('');
   const [externalPhone, setExternalPhone] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
-  const [assignError, setAssignError] = useState('');
+  const [historyModalOrderId, setHistoryModalOrderId] = useState<string | null>(null);
+  const [historyOrderDetail, setHistoryOrderDetail] = useState<OrderDetail | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
@@ -97,7 +114,6 @@ export default function AdminOrdersPage() {
       setDeliveryModalOrderId(orderId);
       setOrderDetail(null);
       setCouriers([]);
-      setAssignError('');
       setAssignMode('platform');
       setSelectedCourierId('');
       setExternalName('');
@@ -120,16 +136,63 @@ export default function AdminOrdersPage() {
     setOrderDetail(null);
   }, []);
 
+  const openHistoryModal = useCallback(
+    (orderId: string) => {
+      setHistoryModalOrderId(orderId);
+      setHistoryOrderDetail(null);
+      setHistoryLoading(true);
+      if (!token) return;
+      fetch(`/api/admin/orders/${orderId}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((data) => {
+          setHistoryOrderDetail(data.error ? null : data);
+        })
+        .finally(() => setHistoryLoading(false));
+    },
+    [token]
+  );
+
+  const closeHistoryModal = useCallback(() => {
+    setHistoryModalOrderId(null);
+    setHistoryOrderDetail(null);
+  }, []);
+
+  function getHistoryEvents(detail: OrderDetail | null): HistoryEvent[] {
+    if (!detail) return [];
+    const events: HistoryEvent[] = [];
+    if (detail.createdAt) events.push({ at: detail.createdAt, labelKey: 'historyOrderCreated' });
+    if (detail.updatedAt && detail.createdAt && detail.updatedAt !== detail.createdAt) {
+      events.push({ at: detail.updatedAt, labelKey: 'historyOrderUpdated' });
+    }
+    const d = detail.delivery;
+    const courierLabel = d?.courier
+      ? `${d.courier.firstName} ${d.courier.lastName}${d.courier.phone ? ` — ${d.courier.phone}` : ''}`
+      : d?.externalCourierName
+        ? `${d.externalCourierName} (contact externe)${d.externalCourierPhone ? ` — ${d.externalCourierPhone}` : ''}`
+        : null;
+    if (d?.createdAt) events.push({ at: d.createdAt, labelKey: 'historyDeliveryAssigned', detail: courierLabel ?? undefined });
+    if (d?.courierDecisionAt) {
+      const decisionLabel = d.status === 'COURIER_ACCEPTED' ? t('historyDecisionAccept') : d.status === 'COURIER_REFUSED' ? t('historyDecisionRefuse') : t('historyDecisionOnHold');
+      events.push({ at: d.courierDecisionAt, labelKey: 'historyCourierDecision', detail: `${decisionLabel}${courierLabel ? ` — ${courierLabel}` : ''}${d.notes ? ` — ${d.notes}` : ''}` });
+    }
+    if (d?.pickedUpAt) events.push({ at: d.pickedUpAt, labelKey: 'historyPickedUp', detail: courierLabel ?? undefined });
+    if (d?.deliveredAt) events.push({ at: d.deliveredAt, labelKey: 'historyDelivered', detail: courierLabel ?? undefined });
+    if (d?.updatedAt && d.createdAt && d.updatedAt !== d.createdAt) {
+      events.push({ at: d.updatedAt, labelKey: 'historyDeliveryUpdated' });
+    }
+    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+    return events;
+  }
+
   const handleAssignDelivery = useCallback(async () => {
     if (!deliveryModalOrderId || !token) return;
-    setAssignError('');
     setAssignSubmitting(true);
     const body: { orderId: string; courierId?: string; externalCourierName?: string; externalCourierPhone?: string } = {
       orderId: deliveryModalOrderId,
     };
     if (assignMode === 'platform') {
       if (!selectedCourierId) {
-        setAssignError('Choisissez un livreur de la plateforme.');
+        toast.error('Choisissez un livreur de la plateforme.');
         setAssignSubmitting(false);
         return;
       }
@@ -138,13 +201,13 @@ export default function AdminOrdersPage() {
       const name = sanitizeName(externalName, LIMITS.name);
       const phone = sanitizePhone(externalPhone);
       if (!name || !phone) {
-        setAssignError('Nom et téléphone du contact externe requis.');
+        toast.error('Nom et téléphone du contact externe requis.');
         setAssignSubmitting(false);
         return;
       }
       const phoneCheck = validatePhone(phone);
       if (!phoneCheck.ok) {
-        setAssignError(phoneCheck.message ?? 'Téléphone invalide.');
+        toast.error(phoneCheck.message ?? 'Téléphone invalide.');
         setAssignSubmitting(false);
         return;
       }
@@ -159,9 +222,10 @@ export default function AdminOrdersPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setAssignError(data.error ?? 'Erreur');
+        toast.error(data.error ?? 'Erreur');
         return;
       }
+      toast.success('Livraison assignée.');
       closeDeliveryModal();
     } finally {
       setAssignSubmitting(false);
@@ -193,17 +257,17 @@ export default function AdminOrdersPage() {
       {loading ? (
         <span className="loading loading-spinner" />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="table table-zebra">
+        <div className="overflow-x-auto -mx-2 sm:mx-0">
+          <table className="table table-zebra min-w-[640px]">
             <thead>
               <tr>
-                <th>N°</th>
+                <th className="bg-base-100">N°</th>
                 <th>Client</th>
                 <th>Fournisseur</th>
                 <th>Total</th>
                 <th>Statut</th>
                 <th>Date</th>
-                <th>Livraison</th>
+                <th className="min-w-[max(22ch,max-content)] w-px">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -213,7 +277,7 @@ export default function AdminOrdersPage() {
                   id={highlightId === o.id ? 'highlight' : undefined}
                   className={highlightId === o.id ? 'bg-primary/10' : ''}
                 >
-                  <td className="font-mono">{o.orderNumber}</td>
+                  <td className="font-mono bg-base-100 sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">{o.orderNumber}</td>
                   <td>
                     {o.user
                       ? `${o.user.firstName} ${o.user.lastName}`
@@ -222,7 +286,14 @@ export default function AdminOrdersPage() {
                   <td>{o.companyProfile?.companyName ?? '-'}</td>
                   <td>{Number(o.total).toLocaleString('fr-FR')} {o.currency}</td>
                   <td>
-                    <span className="badge badge-ghost">{o.status}</span>
+                    {/* Un seul statut : livraison si elle existe (évolue avec la commande), sinon statut commande */}
+                    {o.delivery ? (
+                      <span className="badge badge-neutral" title={t(deliveryStatusToKey(o.delivery.status))}>
+                        {t(deliveryStatusToKey(o.delivery.status))}
+                      </span>
+                    ) : (
+                      <span className="badge badge-ghost">{t(orderStatusToKey(o.status))}</span>
+                    )}
                   </td>
                   <td className="text-sm opacity-80">
                     {new Date(o.createdAt).toLocaleDateString('fr-FR', {
@@ -233,14 +304,25 @@ export default function AdminOrdersPage() {
                       minute: '2-digit',
                     })}
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openDeliveryModal(o.id)}
-                    >
-                      Confier livraison
-                    </button>
+                  <td className="min-w-[max(22ch,max-content)] align-top">
+                    <div className="flex flex-col gap-1 w-max">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm whitespace-nowrap w-full justify-start text-left"
+                        onClick={() => openHistoryModal(o.id)}
+                        title={t('orderHistory')}
+                      >
+                        {t('orderHistory')}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm whitespace-nowrap w-full justify-start text-left"
+                        onClick={() => openDeliveryModal(o.id)}
+                        title={t('assignDelivery')}
+                      >
+                        {t('assignDelivery')}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -255,7 +337,7 @@ export default function AdminOrdersPage() {
       {deliveryModalOrderId && (
         <dialog open className="modal modal-open">
           <div className="modal-box max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg">Confier la livraison</h3>
+            <h3 className="font-bold text-lg">{t('assignDelivery')}</h3>
             {!orderDetail ? (
               <span className="loading loading-spinner my-4" />
             ) : (
@@ -281,8 +363,25 @@ export default function AdminOrdersPage() {
                   </p>
                   <p><strong>Articles :</strong> {orderDetail.items?.map((i) => `${i.product.name} × ${i.quantity}`).join(', ') ?? '—'}</p>
                   <p><strong>Total :</strong> {Number(orderDetail.total).toLocaleString('fr-FR')} {orderDetail.currency}</p>
-                  {orderDetail.delivery && (orderDetail.delivery.courier || orderDetail.delivery.externalCourierName) && (
-                    <p className="text-primary"><strong>Déjà assigné :</strong> {orderDetail.delivery.courier ? `${orderDetail.delivery.courier.firstName} ${orderDetail.delivery.courier.lastName}` : `${orderDetail.delivery.externalCourierName} (${orderDetail.delivery.externalCourierPhone})`}</p>
+                  {orderDetail.delivery && (
+                    <div className="mt-2 p-2 rounded-lg bg-base-200 space-y-1">
+                      <p><strong>{t('deliveryStatusLabel')} :</strong> <span className="badge badge-neutral badge-sm">{t(deliveryStatusToKey(orderDetail.delivery.status))}</span></p>
+                      {(orderDetail.delivery.courier || orderDetail.delivery.externalCourierName) && (
+                        <p className="text-primary"><strong>{t('deliveryCourierLabel')} :</strong> {orderDetail.delivery.courier ? `${orderDetail.delivery.courier.firstName} ${orderDetail.delivery.courier.lastName}` : `${orderDetail.delivery.externalCourierName} (${orderDetail.delivery.externalCourierPhone})`}</p>
+                      )}
+                      {orderDetail.delivery.pickedUpAt && (
+                        <p className="text-sm"><strong>{t('deliveryPickedUpAt')} :</strong> {new Date(orderDetail.delivery.pickedUpAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })}</p>
+                      )}
+                      {orderDetail.delivery.deliveredAt && (
+                        <p className="text-sm text-success"><strong>{t('deliveryDeliveredAt')} :</strong> {new Date(orderDetail.delivery.deliveredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })}</p>
+                      )}
+                      {COURIER_DECISION_STATUSES.includes(orderDetail.delivery.status) && orderDetail.delivery.courierDecisionAt && (
+                        <p className="text-sm"><strong>{t('deliveryDecisionAt')} :</strong> {new Date(orderDetail.delivery.courierDecisionAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })}</p>
+                      )}
+                      {orderDetail.delivery.notes && (
+                        <p className="text-sm mt-1"><strong>{t('deliveryReasonNote')} :</strong> {orderDetail.delivery.notes}</p>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="divider" />
@@ -344,7 +443,6 @@ export default function AdminOrdersPage() {
                     </div>
                   )}
                 </div>
-                {assignError && <p className="text-error text-sm mt-2">{assignError}</p>}
               </>
             )}
             <div className="modal-action">
@@ -356,13 +454,71 @@ export default function AdminOrdersPage() {
                   disabled={assignSubmitting || (assignMode === 'platform' && !selectedCourierId) || (assignMode === 'external' && (!externalName.trim() || !externalPhone.trim()))}
                   onClick={handleAssignDelivery}
                 >
-                  {assignSubmitting ? 'Envoi…' : 'Confier la livraison'}
+                  {assignSubmitting ? t('loading') : t('assignDelivery')}
                 </button>
               )}
             </div>
           </div>
           <form method="dialog" className="modal-backdrop">
             <button type="button" onClick={closeDeliveryModal}>fermer</button>
+          </form>
+        </dialog>
+      )}
+
+      {historyModalOrderId && (
+        <dialog open className="modal modal-open">
+          <div className="modal-box max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-lg">{t('orderHistoryTitle')}</h3>
+            {historyLoading ? (
+              <span className="loading loading-spinner my-6" />
+            ) : !historyOrderDetail ? (
+              <p className="text-base-content/70 my-4">Impossible de charger l&apos;historique.</p>
+            ) : (
+              <>
+                <p className="font-mono font-semibold text-sm mt-2 mb-3">{historyOrderDetail.orderNumber}</p>
+
+                <div className="rounded-lg bg-base-200 p-3 mb-6 text-sm space-y-2">
+                  <p><strong>{t('historyClient')} :</strong> {historyOrderDetail.user ? `${historyOrderDetail.user.firstName} ${historyOrderDetail.user.lastName}` : [historyOrderDetail.guestFirstName, historyOrderDetail.guestLastName].filter(Boolean).join(' ') || historyOrderDetail.guestEmail || '—'}
+                    {historyOrderDetail.user?.email || historyOrderDetail.guestEmail ? ` — ${historyOrderDetail.user?.email || historyOrderDetail.guestEmail}` : ''}
+                    {historyOrderDetail.shippingAddress?.phone ? ` — Tél: ${String(historyOrderDetail.shippingAddress.phone)}` : ''}
+                  </p>
+                  <p><strong>{t('historySupplier')} :</strong> {historyOrderDetail.companyProfile?.companyName ?? '—'}
+                    {historyOrderDetail.companyProfile?.address || historyOrderDetail.companyProfile?.city ? ` — ${[historyOrderDetail.companyProfile?.address, historyOrderDetail.companyProfile?.city].filter(Boolean).join(', ')}` : ''}
+                    {historyOrderDetail.companyProfile?.user?.phone ? ` — Tél: ${historyOrderDetail.companyProfile?.user.phone}` : ''}
+                  </p>
+                  <p><strong>{t('historyDeliveryAddress')} :</strong> {[historyOrderDetail.shippingAddress?.address, historyOrderDetail.shippingAddress?.city].filter(Boolean).join(', ') || '—'}
+                    {historyOrderDetail.shippingAddress?.lat != null && historyOrderDetail.shippingAddress?.lng != null ? ` (GPS: ${Number(historyOrderDetail.shippingAddress.lat)}, ${Number(historyOrderDetail.shippingAddress.lng)})` : ''}
+                  </p>
+                  <p><strong>{t('historyItems')} :</strong> {historyOrderDetail.items?.map((i) => `${i.product.name} × ${i.quantity}`).join(', ') ?? '—'}</p>
+                  <p><strong>{t('historyTotal')} :</strong> {Number(historyOrderDetail.total).toLocaleString('fr-FR')} {historyOrderDetail.currency}</p>
+                  {historyOrderDetail.delivery && (historyOrderDetail.delivery.courier || historyOrderDetail.delivery.externalCourierName) && (
+                    <p><strong>{t('historyCourier')} :</strong> <span className="text-primary">{historyOrderDetail.delivery.courier ? `${historyOrderDetail.delivery.courier.firstName} ${historyOrderDetail.delivery.courier.lastName}${historyOrderDetail.delivery.courier.phone ? ` — ${historyOrderDetail.delivery.courier.phone}` : ''}` : `${historyOrderDetail.delivery.externalCourierName} (contact externe)${historyOrderDetail.delivery.externalCourierPhone ? ` — ${historyOrderDetail.delivery.externalCourierPhone}` : ''}`}</span></p>
+                  )}
+                </div>
+
+                <p className="font-medium text-sm mb-2">{t('historyMovements')}</p>
+                <ul className="space-y-3 border-l-2 border-primary/30 pl-4 ml-2">
+                  {getHistoryEvents(historyOrderDetail).map((evt, i) => (
+                    <li key={i} className="relative before:absolute before:left-[-1.25rem] before:top-1.5 before:w-2 before:h-2 before:rounded-full before:bg-primary">
+                      <p className="font-medium text-sm">{t(evt.labelKey)}</p>
+                      {evt.detail && <p className="text-xs text-base-content/80 mt-1">{evt.detail}</p>}
+                      <p className="text-xs opacity-70 mt-0.5">
+                        {new Date(evt.at).toLocaleString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                {getHistoryEvents(historyOrderDetail).length === 0 && (
+                  <p className="text-base-content/70 text-sm">Aucun événement enregistré.</p>
+                )}
+              </>
+            )}
+            <div className="modal-action">
+              <button type="button" className="btn btn-ghost" onClick={closeHistoryModal}>Fermer</button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button type="button" onClick={closeHistoryModal}>fermer</button>
           </form>
         </dialog>
       )}

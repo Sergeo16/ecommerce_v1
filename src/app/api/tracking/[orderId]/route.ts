@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getDeliveryTrackingEnabled } from '@/lib/rules-engine';
 import { verifyAccessToken } from '@/lib/jwt';
+import { translations, type Locale } from '@/lib/translations';
 
 export async function GET(
   request: NextRequest,
@@ -66,15 +67,19 @@ export async function GET(
     );
   }
 
+  const localeParam = request.nextUrl.searchParams.get('locale');
+  const locale: Locale = localeParam === 'en' || localeParam === 'fr' ? localeParam : (request.headers.get('accept-language')?.toLowerCase().includes('en') ? 'en' : 'fr');
+  const tr = translations[locale];
+
   return NextResponse.json({
     orderNumber: order.orderNumber,
     status: delivery.status,
     stages: [
-      delivery.status === 'PENDING' && { label: 'En attente', done: true },
-      ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: 'Assignée', done: true },
-      ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: 'Enlevée', done: true },
-      ['IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: 'En route', done: true },
-      delivery.status === 'DELIVERED' && { label: 'Livrée', done: true },
+      delivery.status === 'PENDING' && { label: tr.deliveryStatusPending, done: true },
+      ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: tr.deliveryStatusAssigned, done: true },
+      ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: tr.deliveryStatusPickedUp, done: true },
+      ['IN_TRANSIT', 'DELIVERED'].includes(delivery.status) && { label: tr.deliveryStatusInTransit, done: true },
+      delivery.status === 'DELIVERED' && { label: tr.deliveryStatusDelivered, done: true },
     ].filter(Boolean),
     courier: delivery.courier,
     pickedUpAt: delivery.pickedUpAt,

@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
     where: {
       role: 'COURIER',
       status: 'ACTIVE',
-      courierProfile: { isVerified: true },
     },
     select: {
       id: true,

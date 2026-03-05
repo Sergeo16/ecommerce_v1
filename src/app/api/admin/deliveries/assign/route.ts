@@ -54,6 +54,20 @@ export async function POST(request: NextRequest) {
   });
   if (!order) return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 });
 
+  // Dès que le livreur a signalé la livraison (ou échec/retour), l'admin ne peut plus réaffecter
+  const terminalStatuses = ['DELIVERED', 'FAILED', 'RETURNED'];
+  if (order.delivery && terminalStatuses.includes(order.delivery.status)) {
+    return NextResponse.json(
+      {
+        error:
+          order.delivery.status === 'DELIVERED'
+            ? 'Cette commande est déjà livrée ; elle ne peut plus être affectée à un autre livreur.'
+            : 'Cette livraison est clôturée (échec ou retour) et ne peut plus être réaffectée.',
+      },
+      { status: 400 }
+    );
+  }
+
   if (usePlatformCourier) {
     const courier = await prisma.user.findFirst({
       where: { id: courierId!, role: 'COURIER', status: 'ACTIVE' },

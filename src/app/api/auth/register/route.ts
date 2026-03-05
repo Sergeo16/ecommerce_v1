@@ -45,6 +45,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (role === 'COURIER') {
+    const hasPhone = phone != null && String(phone).trim().length > 0;
+    if (!hasPhone) {
+      return NextResponse.json({ error: 'Le numéro de téléphone est obligatoire pour les livreurs.' }, { status: 400 });
+    }
+  }
+
   const safeFirstName = firstName?.trim() ?? '';
   const safeLastName = lastName?.trim() ?? '';
   if (role !== 'SUPPLIER' && (!safeFirstName || !safeLastName)) {

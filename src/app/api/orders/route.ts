@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
           user: { select: { id: true, email: true, firstName: true, lastName: true } },
           companyProfile: { select: { companyName: true, slug: true } },
           items: { include: { product: { select: { name: true } } } },
+          delivery: { select: { status: true, deliveredAt: true, pickedUpAt: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: page * limit,

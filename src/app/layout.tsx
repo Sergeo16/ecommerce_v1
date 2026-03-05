@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import 'react-toastify/dist/ReactToastify.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { LocaleProvider } from '@/context/LocaleContext';
 import { MaintenanceGate } from '@/components/MaintenanceGate';
 import { AdminMaintenanceBanner } from '@/components/AdminMaintenanceBanner';
+import { ToastContainerWrapper } from '@/components/ToastContainerWrapper';
 
 export const metadata: Metadata = {
   title: 'Africa Marketplace — E-commerce & Livraison',
@@ -27,6 +29,7 @@ export default function RootLayout({
               <MaintenanceGate>
                 <AdminMaintenanceBanner />
                 {children}
+                <ToastContainerWrapper />
               </MaintenanceGate>
               </CartProvider>
             </AuthProvider>

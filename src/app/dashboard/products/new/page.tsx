@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -45,7 +46,6 @@ export default function NewProductPage() {
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(['XOF']);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [uploadingIndex, setUploadingIndex] = useState<{ type: 'image' | 'video'; i: number } | null>(null);
 
   const [name, setName] = useState('');
@@ -123,7 +123,6 @@ export default function NewProductPage() {
 
   async function handleFileUpload(file: File, type: 'image' | 'video', index: number) {
     setUploadingIndex({ type, i: index });
-    setError('');
     const formData = new FormData();
     formData.set('file', file);
     formData.set('type', type);
@@ -147,7 +146,7 @@ export default function NewProductPage() {
       if (type === 'image') setImageUrl(index, (data.url as string) ?? '');
       else setVideoUrl(index, (data.url as string) ?? '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('uploadFailed'));
+      toast.error(err instanceof Error ? err.message : t('uploadFailed'));
     } finally {
       setUploadingIndex(null);
     }
@@ -170,32 +169,31 @@ export default function NewProductPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
 
     const nameTrim = name.trim();
     const descTrim = description.trim();
     const categoryNameTrim = categoryOther.trim();
 
     if (!nameTrim) {
-      setError(t('nameRequired'));
+      toast.error(t('nameRequired'));
       return;
     }
     if (!ALLOWED_NAME.test(nameTrim)) {
-      setError(t('invalidCharactersName'));
+      toast.error(t('invalidCharactersName'));
       return;
     }
     if (descTrim && !ALLOWED_DESCRIPTION.test(descTrim)) {
-      setError(t('invalidCharactersDescription'));
+      toast.error(t('invalidCharactersDescription'));
       return;
     }
     if (categoryNameTrim && !ALLOWED_CATEGORY.test(categoryNameTrim)) {
-      setError(t('invalidCharactersCategory'));
+      toast.error(t('invalidCharactersCategory'));
       return;
     }
 
     const priceNum = parseFloat(price);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError(t('invalidPrice'));
+      toast.error(t('invalidPrice'));
       return;
     }
 
@@ -204,7 +202,7 @@ export default function NewProductPage() {
     const mainIdx = Math.min(mainImageIndex, Math.max(0, images.length - 1));
 
     if (images.length === 0) {
-      setError(t('atLeastOneImage'));
+      toast.error(t('atLeastOneImage'));
       return;
     }
 
@@ -241,13 +239,14 @@ export default function NewProductPage() {
         ok = await doSubmit(newToken);
       }
       if (ok) {
+        toast.success(t('saved') ?? 'Produit créé.');
         router.push('/dashboard/products');
         router.refresh();
       } else if (ok === null) {
-        setError(t('sessionExpired'));
+        toast.error(t('sessionExpired'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -288,7 +287,6 @@ export default function NewProductPage() {
       <main className="container mx-auto p-4 sm:p-6 max-w-2xl">
         <h1 className="text-2xl font-bold mb-6">{t('publishProduct')}</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && <div className="alert alert-error text-sm">{error}</div>}
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productName')} *</span></label>
             <input

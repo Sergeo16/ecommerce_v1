@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -43,7 +44,6 @@ export default function EditProductPage() {
   const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(['XOF']);
   const [loadProduct, setLoadProduct] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [uploadingIndex, setUploadingIndex] = useState<{ type: 'image' | 'video'; i: number } | null>(null);
 
   const [name, setName] = useState('');
@@ -74,7 +74,7 @@ export default function EditProductPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((p: Record<string, unknown> | null) => {
         if (!p) {
-          setError('Produit introuvable.');
+          toast.error('Produit introuvable.');
           setLoadProduct(false);
           return;
         }
@@ -93,7 +93,7 @@ export default function EditProductPage() {
         setLoadProduct(false);
       })
       .catch(() => {
-        setError('Erreur au chargement.');
+        toast.error('Erreur au chargement.');
         setLoadProduct(false);
       });
   }, [id, token, canPublish]);
@@ -131,7 +131,6 @@ export default function EditProductPage() {
 
   async function handleFileUpload(file: File, type: 'image' | 'video', index: number) {
     setUploadingIndex({ type, i: index });
-    setError('');
     const formData = new FormData();
     formData.set('file', file);
     formData.set('type', type);
@@ -146,7 +145,7 @@ export default function EditProductPage() {
       if (type === 'image') setImageUrl(index, (data.url as string) ?? '');
       else setVideoUrl(index, (data.url as string) ?? '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('uploadFailed'));
+      toast.error(err instanceof Error ? err.message : t('uploadFailed'));
     } finally {
       setUploadingIndex(null);
     }
@@ -169,36 +168,35 @@ export default function EditProductPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
     const nameTrim = name.trim();
     const descTrim = description.trim();
     const categoryNameTrim = categoryOther.trim();
     if (!nameTrim) {
-      setError(t('nameRequired'));
+      toast.error(t('nameRequired'));
       return;
     }
     if (!ALLOWED_NAME.test(nameTrim)) {
-      setError(t('invalidCharactersName'));
+      toast.error(t('invalidCharactersName'));
       return;
     }
     if (descTrim && !ALLOWED_DESCRIPTION.test(descTrim)) {
-      setError(t('invalidCharactersDescription'));
+      toast.error(t('invalidCharactersDescription'));
       return;
     }
     if (categoryNameTrim && !ALLOWED_CATEGORY.test(categoryNameTrim)) {
-      setError(t('invalidCharactersCategory'));
+      toast.error(t('invalidCharactersCategory'));
       return;
     }
     const priceNum = parseFloat(price);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError(t('invalidPrice'));
+      toast.error(t('invalidPrice'));
       return;
     }
     const images = imageUrls.map((u) => u.trim()).filter(Boolean);
     const videos = videoUrls.map((u) => u.trim()).filter(Boolean);
     const mainIdx = Math.min(mainImageIndex, Math.max(0, images.length - 1));
     if (images.length === 0) {
-      setError(t('atLeastOneImage'));
+      toast.error(t('atLeastOneImage'));
       return;
     }
 
@@ -235,13 +233,14 @@ export default function EditProductPage() {
         ok = await doPatch(newToken);
       }
       if (ok) {
+        toast.success(t('saved') ?? 'Produit enregistré.');
         router.push('/dashboard/products');
         router.refresh();
       } else if (ok === null) {
-        setError(t('sessionExpired'));
+        toast.error(t('sessionExpired'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -290,7 +289,6 @@ export default function EditProductPage() {
       <main className="container mx-auto p-4 sm:p-6 max-w-2xl">
         <h1 className="text-2xl font-bold mb-6">{t('editProductTitle')}</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && <div className="alert alert-error text-sm">{error}</div>}
           <div className="form-control">
             <label className="label"><span className="label-text">{t('productName')} *</span></label>
             <input type="text" className="input input-bordered w-full" value={name} onChange={(e) => setName(e.target.value)} required maxLength={255} />

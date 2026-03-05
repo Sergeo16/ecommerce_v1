@@ -364,6 +364,9 @@ model Commission {
 enum DeliveryStatus {
   PENDING
   ASSIGNED
+  COURIER_ACCEPTED
+  ON_HOLD
+  COURIER_REFUSED
   PICKED_UP
   IN_TRANSIT
   DELIVERED
@@ -417,6 +420,7 @@ model Delivery {
   proofPhotoUrl        String?        @map("proof_photo_url")
   signatureUrl         String?        @map("signature_url")
   notes                String?        @db.Text
+  courierDecisionAt    DateTime?      @map("courier_decision_at")
   pickedUpAt           DateTime?      @map("picked_up_at")
   deliveredAt          DateTime?      @map("delivered_at")
   createdAt            DateTime       @default(now()) @map("created_at")

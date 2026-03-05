@@ -68,6 +68,24 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
   }
 
+  // Signaler aux autres livreurs que cette mission n'est plus disponible
+  const orderNumber = delivery?.order?.orderNumber ?? 'Commande';
+  const otherCouriers = await prisma.user.findMany({
+    where: { role: 'COURIER', status: 'ACTIVE', id: { not: userId } },
+    select: { id: true },
+  });
+  if (otherCouriers.length > 0) {
+    await prisma.notification.createMany({
+      data: otherCouriers.map((c) => ({
+        userId: c.id,
+        type: 'mission_taken',
+        title: 'Mission prise par un autre livreur',
+        body: `La mission ${orderNumber} a été prise par un autre livreur et n'est plus disponible.`,
+        data: { orderNumber, orderId: delivery?.orderId, deliveryId },
+      })),
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }
 

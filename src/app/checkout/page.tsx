@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -35,7 +36,6 @@ function CheckoutContent() {
   const [quantity, setQuantity] = useState(qtyFromUrl);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   const [email, setEmail] = useState('');
@@ -209,14 +209,13 @@ function CheckoutContent() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
     const items = fromCart
       ? cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity }))
       : productId && product ? [{ productId, quantity }] : [];
     if (items.length === 0) {
       restoreFromCheckoutBackup();
       reloadFromStorage();
-      setError(t('cartEmptyDesc'));
+      toast.error(t('cartEmptyDesc'));
       return;
     }
     const curr = fromCart ? (cartItems[0]?.currency ?? CANONICAL_CURRENCY) : (product?.currency ?? CANONICAL_CURRENCY);
@@ -224,7 +223,7 @@ function CheckoutContent() {
     const needsConversion =
       requiresPayment && !isPaymentAcceptedCurrency(curr);
     if (needsConversion && !conversionAccepted) {
-      setError(t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'));
+      toast.error(t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'));
       return;
     }
     const ship: Record<string, unknown> = {
@@ -237,13 +236,13 @@ function CheckoutContent() {
       ship.lng = locationCoords.lng;
     }
     if (!ship.address || !ship.city) {
-      setError(t('addressCityRequired'));
+      toast.error(t('addressCityRequired'));
       return;
     }
     if (isGuest) {
       const em = email.trim();
       if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-        setError(t('emailInvalid'));
+        toast.error(t('emailInvalid'));
         return;
       }
     }
@@ -333,9 +332,10 @@ function CheckoutContent() {
                 if (!verifyRes.ok) throw new Error(verifyData.error ?? 'Vérification échouée');
                 setOrderNumber(data.order!.orderNumber ?? null);
                 clearCart();
+                toast.success(t('orderSuccess'));
                 resolve();
               } catch (e) {
-                setError(e instanceof Error ? e.message : 'Vérification échouée');
+                toast.error(e instanceof Error ? e.message : 'Vérification échouée');
                 reject(e);
               } finally {
                 setSubmitting(false);
@@ -344,7 +344,7 @@ function CheckoutContent() {
           });
           (win as unknown as { addFailedListener?: (cb: (err: unknown) => void) => void }).addFailedListener?.((err: unknown) => {
             cleanup();
-            setError(err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : t('paymentFailed') ?? 'Paiement échoué');
+            toast.error(err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : t('paymentFailed') ?? 'Paiement échoué');
             setSubmitting(false);
             reject(err);
           });
@@ -360,9 +360,10 @@ function CheckoutContent() {
       } else {
         setOrderNumber(data.order?.orderNumber ?? null);
         clearCart();
+        toast.success(t('orderSuccess'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setSubmitting(false);
     }
@@ -712,7 +713,6 @@ function CheckoutContent() {
               maxLength={20}
               required
             />
-            {error && <div className="alert alert-error text-sm break-words">{error}</div>}
             <button
               type="submit"
               className="btn btn-primary w-full"

@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       createdAt: d.createdAt,
       pickedUpAt: d.pickedUpAt,
       deliveredAt: d.deliveredAt,
+      notes: d.notes,
       customer: d.order.user,
     }))
   );

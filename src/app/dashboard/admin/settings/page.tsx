@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -22,7 +23,6 @@ export default function AdminSettingsPage() {
   const { t } = useLocale();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<'saved' | 'error' | null>(null);
 
   const [fullUpfront, setFullUpfront] = useState(true);
   const [partialAdvance, setPartialAdvance] = useState(true);
@@ -86,7 +86,7 @@ export default function AdminSettingsPage() {
       setDeliveryFeeSuppliers((typeof sup === 'object' && sup !== null ? sup : {}) as Record<string, number>);
       setSuppliers(Array.isArray(suppliersList) ? suppliersList : []);
     })
-    .catch(() => setMessage('error'))
+    .catch(() => toast.error('Erreur lors du chargement.'))
     .finally(() => setLoading(false));
   }, [token, user?.role]);
 
@@ -112,7 +112,6 @@ export default function AdminSettingsPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setMessage(null);
     setSaving(true);
     try {
       await putSetting('payment_modes', {
@@ -140,10 +139,9 @@ export default function AdminSettingsPage() {
       await putSetting('allowed_currencies', allowedCurrencies.length > 0 ? allowedCurrencies : ['XOF']);
       await putSetting('delivery_fee_default', deliveryFeeDefault);
       await putSetting('delivery_fee_suppliers', deliveryFeeSuppliers);
-      setMessage('saved');
-      setTimeout(() => setMessage(null), 3000);
+      toast.success(t('saved'));
     } catch {
-      setMessage('error');
+      toast.error('Erreur lors de l\'enregistrement.');
     } finally {
       setSaving(false);
     }
@@ -462,12 +460,6 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {message === 'saved' && (
-            <p className="text-success font-medium">{t('saved')}</p>
-          )}
-          {message === 'error' && (
-            <p className="text-error">Erreur lors de l&apos;enregistrement.</p>
-          )}
           <button type="submit" className="btn btn-primary" disabled={saving}>
             {saving ? '...' : t('save')}
           </button>
