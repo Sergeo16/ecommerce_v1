@@ -32,6 +32,93 @@ npm run dev
 - **Livreur** : missions, statuts, preuves
 - **Client** : commandes, paiement (total / partiel / à la livraison), suivi
 
+## Affiliation : parcours complet d’un affilié
+
+Cette section explique, pour un affilié, **comment proposer ses services et gagner de l’argent** grâce à la plateforme.
+
+### 1. Création du compte affilié
+
+- **Inscription** via la page d’enregistrement classique.
+- Choix du **rôle "Affilié"** (ou conversion de compte existant par l’Admin).
+- Une fois validé, l’affilié accède à son **Dashboard affilié** avec :
+  - résumé des commissions,
+  - liens d’affiliation disponibles,
+  - historique des performances.
+
+### 2. Choix de l’offre à promouvoir
+
+- L’affilié peut :
+  - promouvoir **un produit précis** (lien profond vers la fiche produit),
+  - ou une **boutique / fournisseur** (lien vers la vitrine du vendeur),
+  - ou éventuellement une **catégorie / campagne spéciale** (landing d’une promo, selon les règles définies par le Super Admin).
+- Chaque lien est **personnalisé** avec l’identifiant affilié pour assurer le tracking.
+
+### 3. Génération et partage des liens
+
+- Depuis son dashboard, l’affilié peut :
+  - copier un **lien court** prêt à partager,
+  - ou générer un **lien UTM** pour mesurer les performances marketing (campagne, source, medium…).
+- Canaux typiques :
+  - réseaux sociaux (Facebook, Instagram, TikTok, Twitter, WhatsApp, Telegram),
+  - blog / site perso,
+  - email / SMS marketing,
+  - groupes Messenger / communautés.
+
+### 4. Tracking des clics et des ventes
+
+- Chaque visiteur qui clique sur un lien affilié est **tagué** (cookie + session + éventuellement device / IP).
+- Si le visiteur :
+  - crée un compte,
+  - ajoute des produits au panier,
+  - puis **paye la commande**,
+  alors la commande est **rattachée à l’affilié** (selon les règles configurées : dernier clic, premier clic, durée de vie du cookie, etc.).
+- Les **commandes annulées, remboursées ou échouées** ne génèrent pas de commission (ou sont déduites, selon les règles définies par le Super Admin).
+
+### 5. Calcul des commissions
+
+- Le Super Admin définit :
+  - un **taux global par défaut**,
+  - des **taux spécifiques par fournisseur**, par catégorie, voire par produit.
+- Pour chaque commande éligible :
+  - la plateforme calcule la **commission brute** (montant commande × taux),
+  - applique éventuellement des **ajustements** (frais, remises, plafonds),
+  - enregistre une **ligne de commission** rattachée à l’affilié et à la commande.
+- L’affilié voit dans son dashboard :
+  - le **détail des commissions par commande**,
+  - le **statut** de chaque commission (en attente, validée, payée, annulée),
+  - les **totaux** (jour, semaine, mois, période personnalisée).
+
+### 6. Solde, classement et motivation
+
+- Le dashboard affiche :
+  - le **solde disponible** (commissions validées et non encore retirées),
+  - un **historique des gains** (filtrable par période / fournisseur / produit),
+  - un **classement** optionnel (top affiliés) pour la gamification.
+- Le Super Admin peut mettre en place :
+  - des **paliers de bonus** (ex. +5 % de commission au‑dessus de X ventes),
+  - des **challenges** (meilleur affilié du mois, campagne spéciale, etc.).
+
+### 7. Demande de retrait et paiement
+
+- Quand son solde atteint le **minimum de retrait** défini par l’Admin :
+  - l’affilié peut créer une **demande de retrait** depuis son dashboard,
+  - en choisissant un mode de paiement (Mobile Money, virement, cash, wallet interne… selon la configuration).
+- Le Super Admin (ou l’équipe finance) :
+  - valide ou rejette la demande,
+  - marque le retrait comme **payé** une fois le virement effectué.
+- L’historique des retraits reste accessible dans le dashboard affilié (montant, date, statut, moyen de paiement).
+
+### 8. Résumé pour un affilié
+
+1. **S’inscrire** comme affilié et accéder au dashboard.
+2. **Choisir des produits / boutiques** à promouvoir.
+3. **Partager ses liens** (réseaux sociaux, blog, groupes, emails…).
+4. **Suivre les ventes et commissions** dans le dashboard.
+5. **Demander un retrait** dès que le solde minimum est atteint.
+6. Continuer à optimiser ses campagnes pour **gagner plus**.
+
+L’objectif de la plateforme est que l’affilié n’ait **que trois choses à faire** : **choisir de bonnes offres, bien communiquer et suivre ses résultats**. Tout le reste (tracking, calcul des commissions, paiements des vendeurs, logistique) est géré par la marketplace.
+
 ## Paiement
 
 - Total avant livraison, partiel (avance + solde), à la livraison — configurable par Admin (produit, fournisseur, pays, user)

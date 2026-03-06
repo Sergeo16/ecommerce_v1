@@ -17,7 +17,19 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { createdAt: 'desc' },
   });
-  return NextResponse.json(links);
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const linksWithUrl = links.map((link) => {
+    let trackingLink: string;
+    if (link.product?.slug) {
+      trackingLink = `${baseUrl}/p/${link.product.slug}?ref=${link.referralCode}`;
+    } else if (link.categorySlug) {
+      trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(link.categorySlug)}&ref=${link.referralCode}`;
+    } else {
+      trackingLink = `${baseUrl}/catalog?ref=${link.referralCode}`;
+    }
+    return { ...link, trackingLink };
+  });
+  return NextResponse.json(linksWithUrl);
 }
 
 export async function POST(request: NextRequest) {
@@ -27,6 +39,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const productId = typeof body.productId === 'string' ? body.productId : null;
+  const categorySlug = typeof body.categorySlug === 'string' ? body.categorySlug.trim() || null : null;
   const utmSource = typeof body.utmSource === 'string' ? body.utmSource : null;
   const utmMedium = typeof body.utmMedium === 'string' ? body.utmMedium : null;
   const utmCampaign = typeof body.utmCampaign === 'string' ? body.utmCampaign : null;
@@ -37,18 +50,26 @@ export async function POST(request: NextRequest) {
   const link = await prisma.affiliateLink.create({
     data: {
       userId,
-      productId,
+      productId: productId || null,
+      categorySlug: categorySlug || null,
       slug,
       referralCode,
       utmSource,
       utmMedium,
       utmCampaign,
     },
-    include: { product: { select: { name: true } } },
+    include: { product: { select: { name: true, slug: true } } },
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const trackingLink = `${baseUrl}/p/${link.product?.slug ?? 'catalog'}?ref=${link.referralCode}`;
+  let trackingLink: string;
+  if (link.product?.slug) {
+    trackingLink = `${baseUrl}/p/${link.product.slug}?ref=${link.referralCode}`;
+  } else if (link.categorySlug) {
+    trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(link.categorySlug)}&ref=${link.referralCode}`;
+  } else {
+    trackingLink = `${baseUrl}/catalog?ref=${link.referralCode}`;
+  }
 
   return NextResponse.json({
     ...link,

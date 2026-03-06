@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
@@ -50,7 +50,9 @@ type Product = {
 export default function ProductPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const searchParams = useSearchParams();
+  const router = useRouter();
   const id = searchParams.get('id');
+  const ref = searchParams.get('ref');
   const { t, locale } = useLocale();
   const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
@@ -58,7 +60,14 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
-    if (!slug) return;
+    if (slug === 'catalog') {
+      router.replace(ref ? `/catalog?ref=${ref}` : '/catalog');
+      return;
+    }
+  }, [slug, ref, router]);
+
+  useEffect(() => {
+    if (!slug || slug === 'catalog') return;
     const url = id ? `/api/products/${id}` : `/api/products/slug/${slug}`;
     fetch(url)
       .then((r) => (r.ok ? r.json() : null))
@@ -93,6 +102,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
   const images = product?.imageUrls ?? [];
   const imageUrlsAbs = useMemo(() => images.map((u) => toAbsoluteMediaUrl(u)), [images]);
 
+  if (slug === 'catalog') return <div className="p-8 text-center text-base-content">{t('loading')}</div>;
   if (!product) return <div className="p-8 text-center text-base-content">{t('loading')}</div>;
 
   const videos = product.videoUrls ?? [];

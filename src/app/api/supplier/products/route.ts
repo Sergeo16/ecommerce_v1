@@ -18,8 +18,9 @@ export async function GET(request: NextRequest) {
     companyId = first?.id ?? null;
   }
   if (role === 'SUPPLIER' && !companyId) return NextResponse.json({ products: [] });
+  if (role === 'AFFILIATE' && !companyId) return NextResponse.json({ products: [] });
 
-  const where = role === 'SUPER_ADMIN' ? {} : { companyProfileId: companyId! };
+  const where = role === 'SUPER_ADMIN' ? {} : companyId ? { companyProfileId: companyId } : {};
   const products = await prisma.product.findMany({
     where: Object.keys(where).length ? where : undefined,
     include: { category: { select: { name: true, slug: true } } },

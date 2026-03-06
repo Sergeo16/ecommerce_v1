@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -16,6 +17,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
   const { t } = useLocale();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -24,7 +27,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success(t('loginSuccess') ?? 'Connexion réussie.');
-      router.push('/dashboard');
+      router.push(redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard');
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('loginError'));

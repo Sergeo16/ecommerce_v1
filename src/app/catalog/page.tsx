@@ -3,11 +3,13 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { toast } from 'react-toastify';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
 import { CartLink } from '@/components/CartLink';
 import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
@@ -39,7 +41,9 @@ export default function CatalogPage() {
   const pathname = usePathname();
   const { t, locale } = useLocale();
   const { addItem, itemCount } = useCart();
+  const { user, token, isLoading: authLoading } = useAuth();
   const categorySlug = searchParams.get('category');
+  const affiliateCreate = searchParams.get('affiliate_create') as 'category' | 'product' | null;
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,9 +52,47 @@ export default function CatalogPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+  const [creatingLink, setCreatingLink] = useState(false);
 
   useEffect(() => {
-    fetch('/api/categories').then((r) => r.json()).then((c) => setCategories(c ?? []));
+    if (!affiliateCreate || authLoading) return;
+    if (!user || user.role !== 'AFFILIATE') {
+      const redirect = `/catalog?affiliate_create=${affiliateCreate}`;
+      router.replace(`/auth/login?redirect=${encodeURIComponent(redirect)}`);
+    }
+  }, [affiliateCreate, authLoading, user, router]);
+
+  const createAffiliateLink = async (productId?: string, categorySlug?: string) => {
+    if (!token || creatingLink) return;
+    setCreatingLink(true);
+    try {
+      const res = await fetch('/api/affiliate/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ productId: productId ?? null, categorySlug: categorySlug ?? null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Erreur');
+      toast.success('Lien affilié créé.');
+      router.push('/dashboard/affiliate/links');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setCreatingLink(false);
+    }
+  };
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((r) => r.json())
+      .then((c) => {
+        const list = Array.isArray(c) ? c : [];
+        const flat = list.flatMap((cat: { id: string; name: string; slug: string; children?: Array<{ id: string; name: string; slug: string }> }) =>
+          cat.children?.length ? [cat, ...cat.children] : [cat]
+        );
+        setCategories(flat);
+      })
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
@@ -169,14 +211,42 @@ export default function CatalogPage() {
       )}
 
       <main className="container mx-auto p-4 sm:p-6 max-w-full min-w-0">
+        {affiliateCreate && user?.role === 'AFFILIATE' && (
+          <div className="alert alert-info mb-4">
+            <span>
+              {affiliateCreate === 'category' ? t('affiliateCreateBannerCategory') : t('affiliateCreateBannerProduct')}
+            </span>
+            <Link href="/dashboard/affiliate/links" className="btn btn-sm btn-ghost">{t('cancel')}</Link>
+          </div>
+        )}
           <div className="flex flex-wrap gap-2 mb-6 p-3 rounded-lg border border-base-300 bg-base-100/50">
-          <Link href="/catalog" className="btn btn-sm btn-ghost text-base-content">{t('all')}</Link>
-          {categories.map((c) => (
-            <Link key={c.id} href={`/catalog?category=${c.slug}`} className="btn btn-sm btn-outline border-base-300 text-base-content">
-              {c.name}
-            </Link>
-          ))}
+          <Link
+            href={affiliateCreate ? `/catalog?affiliate_create=${affiliateCreate}` : '/catalog'}
+            className="btn btn-sm btn-ghost text-base-content"
+          >
+            {t('all')}
+          </Link>
+          {categories.map((c) =>
+            affiliateCreate === 'category' ? (
+              <button
+                key={c.id}
+                type="button"
+                className="btn btn-sm btn-outline border-base-300 text-base-content"
+                onClick={() => createAffiliateLink(undefined, c.slug)}
+                disabled={creatingLink}
+              >
+                {creatingLink ? t('loading') : c.name}
+              </button>
+            ) : (
+              <Link key={c.id} href={`/catalog?category=${c.slug}${affiliateCreate ? `&affiliate_create=${affiliateCreate}` : ''}`} className="btn btn-sm btn-outline border-base-300 text-base-content">
+                {c.name}
+              </Link>
+            )
+          )}
         </div>
+        {affiliateCreate === 'category' && !loading && categories.length === 0 && (
+          <p className="text-center text-warning mb-4">{t('affiliateNoCategories')}</p>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -209,40 +279,53 @@ export default function CatalogPage() {
                   </div>
                 </Link>
                 <div className="card-actions p-4 pt-0 gap-2 flex flex-col sm:flex-row min-w-0 w-full">
-                  <Link
-                    href={`/p/${p.slug}?id=${p.id}`}
-                    className="btn btn-primary btn-sm flex-1 min-w-0 justify-center gap-1.5"
-                    title={t('viewDetailsAndBuy')}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('viewDetails')}</span>
-                    <span className="sm:hidden whitespace-nowrap">{t('viewDetailsAndBuy')}</span>
-                  </Link>
-                  <button
-                    type="button"
-                    className="btn btn-outline btn-sm flex-1 min-w-0 justify-center gap-1.5"
-                    onClick={() =>
-                      addItem({
-                        productId: p.id,
-                        name: p.name,
-                        price: p.price,
-                        currency: p.currency ?? 'XOF',
-                        quantity: 1,
-                        slug: p.slug,
-                        companyProfileId: (p as { companyProfileId?: string }).companyProfileId,
-                      })
-                    }
-                    title={t('addToCart')}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('addToCartShort')}</span>
-                    <span className="sm:hidden whitespace-nowrap">{t('addToCart')}</span>
-                  </button>
+                  {affiliateCreate === 'product' ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm flex-1 min-w-0 justify-center gap-1.5"
+                      onClick={() => createAffiliateLink(p.id)}
+                      disabled={creatingLink}
+                    >
+                      {creatingLink ? t('loading') : t('affiliatePromote')}
+                    </button>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/p/${p.slug}?id=${p.id}`}
+                        className="btn btn-primary btn-sm flex-1 min-w-0 justify-center gap-1.5"
+                        title={t('viewDetailsAndBuy')}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('viewDetails')}</span>
+                        <span className="sm:hidden whitespace-nowrap">{t('viewDetailsAndBuy')}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm flex-1 min-w-0 justify-center gap-1.5"
+                        onClick={() =>
+                          addItem({
+                            productId: p.id,
+                            name: p.name,
+                            price: p.price,
+                            currency: p.currency ?? 'XOF',
+                            quantity: 1,
+                            slug: p.slug,
+                            companyProfileId: (p as { companyProfileId?: string }).companyProfileId,
+                          })
+                        }
+                        title={t('addToCart')}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <span className="hidden sm:inline lg:hidden whitespace-nowrap">{t('addToCartShort')}</span>
+                        <span className="sm:hidden whitespace-nowrap">{t('addToCart')}</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               );
@@ -250,7 +333,9 @@ export default function CatalogPage() {
           </div>
         )}
         {!loading && products.length === 0 && (
-          <p className="text-center text-base-content/70">{t('noProduct')}</p>
+          <p className="text-center text-base-content/70">
+            {affiliateCreate === 'product' ? t('affiliateNoProducts') : t('noProduct')}
+          </p>
         )}
       </main>
     </div>

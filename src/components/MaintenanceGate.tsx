@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { MaintenancePage, getPreviewPublicCookie, setPreviewPublicCookie } from '@/components/MaintenancePage';
 
@@ -11,6 +11,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [maintenance, setMaintenance] = useState<boolean | null>(null);
   const [previewPublic, setPreviewPublic] = useState(false);
 
@@ -27,8 +28,9 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
 
   const isAuthPage = pathname != null && AUTH_PATHS.includes(pathname);
   const isAdmin = user?.role === 'SUPER_ADMIN';
+  const isCatalogWithRef = pathname === '/catalog' && searchParams?.get('ref');
   const showMaintenancePage =
-    maintenance === true && !isAuthPage && (!isAdmin || previewPublic);
+    maintenance === true && !isAuthPage && !isCatalogWithRef && (!isAdmin || previewPublic);
 
   const handleExitPreview = useCallback(() => {
     setPreviewPublicCookie(false);

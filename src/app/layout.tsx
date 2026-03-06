@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import 'react-toastify/dist/ReactToastify.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -26,11 +27,13 @@ export default function RootLayout({
           <LocaleProvider>
             <AuthProvider>
               <CartProvider>
+              <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="loading loading-spinner loading-lg" /></div>}>
               <MaintenanceGate>
                 <AdminMaintenanceBanner />
                 {children}
                 <ToastContainerWrapper />
               </MaintenanceGate>
+            </Suspense>
               </CartProvider>
             </AuthProvider>
           </LocaleProvider>

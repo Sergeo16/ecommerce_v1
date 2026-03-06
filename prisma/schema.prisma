@@ -311,6 +311,7 @@ model AffiliateLink {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId     String?  @map("product_id")
   product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categorySlug  String?  @map("category_slug")
   slug          String   @unique
   referralCode  String   @map("referral_code") @unique
   utmSource     String?  @map("utm_source")
