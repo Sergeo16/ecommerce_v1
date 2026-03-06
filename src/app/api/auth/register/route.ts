@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       data: { userId: user.id, vehicleType: 'moto' },
     });
   }
-  if (role === 'AFFILIATE' || role === 'COURIER') {
+  if (role === 'AFFILIATE' || role === 'COURIER' || role === 'SUPPLIER') {
     await prisma.wallet.create({
       data: { userId: user.id, balance: 0, currency: 'XOF' },
     });

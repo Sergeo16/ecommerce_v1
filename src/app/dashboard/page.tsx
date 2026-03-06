@@ -9,6 +9,7 @@ import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { AdminNotificationsBell } from '@/components/AdminNotificationsBell';
 import { formatNumberForLocale } from '@/lib/currency';
+import { roleToDisplayKey } from '@/lib/translations';
 
 export default function DashboardPage() {
   const { user, token, isLoading, logout } = useAuth();
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [affiliateStats, setAffiliateStats] = useState<Record<string, unknown> | null>(null);
   const [courierStats, setCourierStats] = useState<Record<string, unknown> | null>(null);
+  const [supplierStats, setSupplierStats] = useState<Record<string, unknown> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +40,12 @@ export default function DashboardPage() {
         .then((r) => r.json())
         .then(setCourierStats)
         .catch(() => setCourierStats(null));
+    }
+    if (user.role === 'SUPPLIER') {
+      fetch('/api/supplier/stats', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then(setSupplierStats)
+        .catch(() => setSupplierStats(null));
     }
   }, [token, user]);
 
@@ -89,7 +97,7 @@ export default function DashboardPage() {
                 <div className="border-t border-base-300 my-2" />
                 <div className="px-4 py-2 flex gap-2"><ThemeSwitcher /><LocaleSwitcher /></div>
                 <div className="px-4 py-2 border-t border-base-300">
-                  <span className="text-sm opacity-80">{user.firstName} ({user.role})</span>
+                  <span className="text-sm opacity-80">{user.firstName} ({t(roleToDisplayKey(user.role))})</span>
                 </div>
                 <button type="button" className="btn btn-ghost btn-sm w-full justify-start px-4" onClick={() => { setMenuOpen(false); logout(); }}>{t('logout')}</button>
               </div>
@@ -99,7 +107,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto p-6">
-        <h1 className="text-2xl font-bold mb-6">{t('dashboardTitle')} — {user.role}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('dashboardTitle')} — {t(roleToDisplayKey(user.role))}</h1>
 
         {user.role === 'SUPER_ADMIN' && dashboard && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -168,14 +176,60 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {user.role === 'SUPPLIER' && supplierStats && (
+          <div className="mb-8 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="stat bg-base-100 rounded-lg shadow">
+                <div className="stat-title">{t('availableEarnings') ?? 'Disponible'}</div>
+                <div className="stat-value text-primary">{formatNumberForLocale((supplierStats.availableEarnings as number) ?? 0, locale)}</div>
+                <div className="stat-desc">{t('availableCommissionsDesc')}</div>
+              </div>
+              <div className="stat bg-base-100 rounded-lg shadow">
+                <div className="stat-title">{t('heldCommissions')}</div>
+                <div className="stat-value">{formatNumberForLocale((supplierStats.heldEarnings as number) ?? 0, locale)}</div>
+                <div className="stat-desc">{t('heldCommissionsDesc')}</div>
+              </div>
+              <div className="stat bg-base-100 rounded-lg shadow">
+                <div className="stat-title">{t('totalEarnings') ?? 'Total'}</div>
+                <div className="stat-value">{formatNumberForLocale((supplierStats.totalEarnings as number) ?? 0, locale)}</div>
+              </div>
+              <div className="stat bg-base-100 rounded-lg shadow">
+                <div className="stat-title">{t('ordersDelivered') ?? 'Commandes livrées'}</div>
+                <div className="stat-value">{(supplierStats.ordersCount as number) ?? 0}</div>
+              </div>
+            </div>
+            {Array.isArray(supplierStats.salesEvolution) && (supplierStats.salesEvolution as { date: string; amount: number }[]).some((d) => d.amount > 0) && (
+              <div className="card bg-base-100 shadow">
+                <div className="card-body">
+                  <h2 className="card-title text-lg">{t('salesEvolution') ?? 'Évolution des ventes (30 jours)'}</h2>
+                  <div className="flex items-end gap-1 h-24 overflow-x-auto py-2">
+                    {(supplierStats.salesEvolution as { date: string; amount: number }[]).map((d) => {
+                      const max = Math.max(...(supplierStats.salesEvolution as { amount: number }[]).map((x) => x.amount), 1);
+                      return (
+                        <div key={d.date} className="flex flex-col items-center flex-1 min-w-0" title={`${d.date}: ${formatNumberForLocale(d.amount, locale)}`}>
+                          <div className="w-full bg-primary/30 rounded-t transition-all h-full flex flex-col justify-end">
+                            <div className="bg-primary rounded-t" style={{ height: `${(d.amount / max) * 100}%`, minHeight: d.amount > 0 ? '4px' : 0 }} />
+                          </div>
+                          <span className="text-[10px] truncate w-full text-center mt-1">{d.date.slice(8)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-4">
           {user.role === 'SUPER_ADMIN' && (
             <>
               <Link href="/dashboard/admin/settings" className="btn btn-outline">{t('globalSettings')}</Link>
               <Link href="/dashboard/admin/users" className="btn btn-outline">{t('users')}</Link>
-              <Link href="/dashboard/admin/orders" className="btn btn-outline">Commandes</Link>
-              <Link href="/dashboard/admin/affiliates" className="btn btn-outline">Affiliés</Link>
-              <Link href="/dashboard/admin/commissions" className="btn btn-outline">Commissions</Link>
+              <Link href="/dashboard/admin/orders" className="btn btn-outline">{t('orders')}</Link>
+              <Link href="/dashboard/admin/affiliates" className="btn btn-outline">{t('affiliates')}</Link>
+              <Link href="/dashboard/admin/commissions" className="btn btn-outline">{t('commissions')}</Link>
+              <Link href="/dashboard/admin/supplier-payouts" className="btn btn-outline">{t('adminPayoutsTitle')}</Link>
             </>
           )}
           {user.role === 'AFFILIATE' && (
@@ -189,6 +243,9 @@ export default function DashboardPage() {
               <Link href="/dashboard/products" className="btn btn-primary">{t('myProducts')}</Link>
               <Link href="/dashboard/products/new" className="btn btn-outline">{t('publishProduct')}</Link>
             </>
+          )}
+          {user.role === 'SUPPLIER' && (
+            <Link href="/dashboard/supplier/withdraw" className="btn btn-outline">{t('requestWithdrawal')}</Link>
           )}
           {user.role === 'COURIER' && (
             <>

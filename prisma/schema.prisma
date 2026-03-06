@@ -107,6 +107,7 @@ model CompanyProfile {
   products        Product[]
   orders          Order[]  @relation("OrderSupplier")
   deliveryZones   DeliveryZone[]
+  supplierPayouts SupplierPayout[]
 
   // Money Machine: abonnements vendeurs, pub interne
   sellerSubscription SellerSubscription?
@@ -277,6 +278,7 @@ model Order {
   payments  Payment[]
   delivery  Delivery?
   commissions Commission[]
+  supplierPayouts SupplierPayout[]
 
   // Money Machine: escrow, litiges
   escrowTransaction EscrowTransaction?
@@ -367,6 +369,30 @@ model Commission {
   @@index([orderId])
   @@index([userId])
   @@map("commissions")
+}
+
+// ============ PAIEMENTS FOURNISSEURS ============
+enum SupplierPayoutStatus {
+  APPROVED
+  ON_HOLD
+  PAID
+  CANCELLED
+}
+
+model SupplierPayout {
+  id                String              @id @default(cuid())
+  orderId           String              @map("order_id")
+  order             Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  companyProfileId  String              @map("company_profile_id")
+  companyProfile    CompanyProfile      @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  amount            Decimal             @db.Decimal(12, 2)
+  status            SupplierPayoutStatus @default(APPROVED)
+  paidAt            DateTime?           @map("paid_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([companyProfileId])
+  @@map("supplier_payouts")
 }
 
 // ============ LIVRAISON ============

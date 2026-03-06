@@ -12,6 +12,7 @@ import {
   getAffiliateDefaultCommission,
   resolveAffiliateCommissionForOrder,
   areCommissionsHeldForVerification,
+  areSupplierPayoutsHeldForVerification,
 } from './commissions';
 
 const DEFAULT_AFFILIATE_PERCENT = 10;
@@ -22,7 +23,7 @@ const DEFAULT_AFFILIATE_PERCENT = 10;
  * Si l'admin a activé "bloquer pour vérification", les commissions sont en ON_HOLD.
  */
 export async function approveCommissionsOnDelivery(orderId: string): Promise<void> {
-  const [order, delivery, held] = await Promise.all([
+  const [order, delivery, held, supplierHeld] = await Promise.all([
     prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -34,6 +35,7 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
     }),
     prisma.delivery.findUnique({ where: { orderId } }),
     areCommissionsHeldForVerification(),
+    areSupplierPayoutsHeldForVerification(),
   ]);
 
   if (!order || order.items.length === 0) return;
@@ -55,6 +57,8 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
   const existingPlatform = order.commissions.find((c) => c.type === 'PLATFORM');
   const existingAffiliate = order.commissions.find((c) => c.type === 'AFFILIATE');
   const existingCourier = order.commissions.find((c) => c.type === 'COURIER');
+
+  let affiliateAmount = 0;
 
   if (!existingPlatform) {
     await prisma.commission.create({
@@ -145,6 +149,29 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
         type: 'COURIER',
         amount: Number(delivery.commissionAmount),
         status,
+      },
+    });
+  }
+
+  const existingSupplierPayout = await prisma.supplierPayout.findFirst({
+    where: { orderId, companyProfileId: order.companyProfileId },
+  });
+  const platformAmountFinal = existingPlatform ? Number(existingPlatform.amount) : platformAmount;
+  const affiliateAmountFinal = existingAffiliate ? Number(existingAffiliate.amount) : affiliateAmount;
+  const courierAmountFinal =
+    delivery?.courierId && delivery.commissionAmount != null && Number(delivery.commissionAmount) > 0
+      ? Number(delivery.commissionAmount)
+      : 0;
+  const supplierAmount = Math.round((orderTotal - platformAmountFinal - affiliateAmountFinal - courierAmountFinal) * 100) / 100;
+
+  if (supplierAmount > 0 && !existingSupplierPayout) {
+    const supplierStatus = supplierHeld ? 'ON_HOLD' : 'APPROVED';
+    await prisma.supplierPayout.create({
+      data: {
+        orderId,
+        companyProfileId: order.companyProfileId,
+        amount: supplierAmount,
+        status: supplierStatus,
       },
     });
   }

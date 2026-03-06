@@ -43,6 +43,12 @@ export async function areCommissionsHeldForVerification(): Promise<boolean> {
   return v === true;
 }
 
+/** Si true, les paiements fournisseurs sont créés en ON_HOLD. Sinon APPROVED par défaut. */
+export async function areSupplierPayoutsHeldForVerification(): Promise<boolean> {
+  const v = await getSettingJson<boolean>('supplier_payouts_hold_for_verification');
+  return v === true;
+}
+
 export type CommissionAccessDelay = { value: number; unit: 'seconds' | 'minutes' | 'hours' | 'days' | 'months' };
 
 /** Délai configuré par l'admin avant que les commissions APPROVED soient accessibles. Par défaut 0 seconde. */

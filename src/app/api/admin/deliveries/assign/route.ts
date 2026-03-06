@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { sanitizeName, sanitizePhone, validatePhone, LIMITS } from '@/lib/validate-fields';
+import { computeCourierCommissionAmount } from '@/lib/monetization/courier-commission';
 
 /**
  * POST : confier la livraison à un livreur de la plateforme ou à un contact externe.
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
   });
   if (!order) return NextResponse.json({ error: 'Commande introuvable' }, { status: 404 });
 
+  const subtotal = Number(order.subtotal);
+  const shippingAmount = Number(order.shippingAmount);
+
   // Dès que le livreur a signalé la livraison (ou échec/retour), l'admin ne peut plus réaffecter
   const terminalStatuses = ['DELIVERED', 'FAILED', 'RETURNED'];
   if (order.delivery && terminalStatuses.includes(order.delivery.status)) {
@@ -75,19 +79,34 @@ export async function POST(request: NextRequest) {
     if (!courier) return NextResponse.json({ error: 'Livreur introuvable ou inactif' }, { status: 400 });
   }
 
+  const commissionAmount = usePlatformCourier
+    ? await computeCourierCommissionAmount({
+        subtotal,
+        shippingAmount,
+        courierId,
+      })
+    : null;
+
   const delivery = await prisma.delivery.upsert({
     where: { orderId },
     create: {
       orderId,
       status: 'ASSIGNED',
       deliveryAddress: order.shippingAddress as object,
-      ...(usePlatformCourier ? { courierId } : { externalCourierName: externalName!, externalCourierPhone: externalPhone! }),
+      ...(usePlatformCourier
+        ? { courierId, commissionAmount: commissionAmount ?? undefined }
+        : { externalCourierName: externalName!, externalCourierPhone: externalPhone! }),
     },
     update: {
       status: 'ASSIGNED',
       ...(usePlatformCourier
-        ? { courierId, externalCourierName: null, externalCourierPhone: null }
-        : { courierId: null, externalCourierName: externalName!, externalCourierPhone: externalPhone! }),
+        ? {
+            courierId,
+            externalCourierName: null,
+            externalCourierPhone: null,
+            commissionAmount: commissionAmount ?? undefined,
+          }
+        : { courierId: null, externalCourierName: externalName!, externalCourierPhone: externalPhone!, commissionAmount: null }),
     },
   });
 

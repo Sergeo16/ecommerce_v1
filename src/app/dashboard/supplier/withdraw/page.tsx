@@ -17,7 +17,7 @@ type WithdrawData = {
   pendingWithdrawals: Array<{ id: string; amount: number; status: string; createdAt: string }>;
 };
 
-export default function CourierWithdrawPage() {
+export default function SupplierWithdrawPage() {
   const { user, token } = useAuth();
   const { t, locale } = useLocale();
   const [data, setData] = useState<WithdrawData | null>(null);
@@ -29,9 +29,9 @@ export default function CourierWithdrawPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const fetchData = () => {
-    if (!token || user?.role !== 'COURIER') return;
+    if (!token || user?.role !== 'SUPPLIER') return;
     setLoading(true);
-    fetch('/api/courier/withdraw', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/api/supplier/withdraw', { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
         const text = await r.text();
         if (!r.ok) throw new Error(text || r.statusText);
@@ -64,7 +64,7 @@ export default function CourierWithdrawPage() {
       return;
     }
     setSubmitting(true);
-    fetch('/api/courier/withdraw', {
+    fetch('/api/supplier/withdraw', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -87,10 +87,10 @@ export default function CourierWithdrawPage() {
       .finally(() => setSubmitting(false));
   };
 
-  if (user?.role !== 'COURIER') {
+  if (user?.role !== 'SUPPLIER') {
     return (
       <div className="p-8">
-        <p>{t('accessReservedCourier') ?? 'Accès réservé aux livreurs.'}</p>
+        <p>{t('accessReservedSupplier') ?? 'Accès réservé aux fournisseurs.'}</p>
         <Link href="/dashboard" className="btn btn-ghost mt-4">{t('back')}</Link>
       </div>
     );

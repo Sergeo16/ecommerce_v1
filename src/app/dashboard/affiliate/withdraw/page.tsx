@@ -8,6 +8,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { formatNumberForLocale, formatCurrencyForDisplay } from '@/lib/currency';
+import { withdrawalStatusToKey } from '@/lib/translations';
 
 type WithdrawData = {
   balance: number;
@@ -51,15 +52,15 @@ export default function AffiliateWithdrawPage() {
     setSuccess(null);
     const num = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
     if (!Number.isFinite(num) || num <= 0) {
-      setError('Montant invalide');
+      setError(t('invalidAmount'));
       return;
     }
     if (data && num > data.balance) {
-      setError('Solde insuffisant');
+      setError(t('insufficientBalance'));
       return;
     }
     if (data?.frozen) {
-      setError('Portefeuille indisponible');
+      setError(t('walletUnavailable'));
       return;
     }
     setSubmitting(true);
@@ -78,11 +79,11 @@ export default function AffiliateWithdrawPage() {
         return json;
       })
       .then((res) => {
-        setSuccess(res.message ?? 'Demande enregistrée.');
+        setSuccess(res.message ?? t('withdrawRequestSent'));
         setAmount('');
         fetchData();
       })
-      .catch((err) => setError(err.message ?? 'Erreur'))
+      .catch((err) => setError(err.message ?? t('loginError')))
       .finally(() => setSubmitting(false));
   };
 
@@ -120,24 +121,24 @@ export default function AffiliateWithdrawPage() {
             <>
               <div className="card bg-base-100 shadow">
                 <div className="card-body">
-                  <h2 className="card-title text-lg">Solde disponible</h2>
+                  <h2 className="card-title text-lg">{t('availableBalance')}</h2>
                   <p className="text-2xl font-bold">
                     {formatNumberForLocale(data.balance, loc)} {currencyLabel}
                   </p>
                   {data.frozen && (
-                    <p className="text-sm text-warning">Portefeuille gelé. Contactez le support.</p>
+                    <p className="text-sm text-warning">{t('walletFrozen')}</p>
                   )}
                 </div>
               </div>
 
               <form onSubmit={handleSubmit} className="card bg-base-100 shadow">
                 <div className="card-body">
-                  <h2 className="card-title text-lg">Nouvelle demande</h2>
+                  <h2 className="card-title text-lg">{t('newWithdrawRequest')}</h2>
                   {error && <div className="alert alert-error">{error}</div>}
                   {success && <div className="alert alert-success">{success}</div>}
                   <div className="form-control">
                     <label className="label" htmlFor="amount">
-                      <span className="label-text">Montant ({currencyLabel})</span>
+                      <span className="label-text">{t('amount')} ({currencyLabel})</span>
                     </label>
                     <input
                       id="amount"
@@ -152,7 +153,7 @@ export default function AffiliateWithdrawPage() {
                   </div>
                   <div className="form-control">
                     <label className="label">
-                      <span className="label-text">Méthode</span>
+                      <span className="label-text">{t('method')}</span>
                     </label>
                     <select
                       value={method}
@@ -160,7 +161,7 @@ export default function AffiliateWithdrawPage() {
                       className="select select-bordered"
                     >
                       <option value="mobile_money">Mobile Money</option>
-                      <option value="bank">Virement bancaire</option>
+                      <option value="bank">{t('bankTransfer')}</option>
                     </select>
                   </div>
                   <button
@@ -168,7 +169,7 @@ export default function AffiliateWithdrawPage() {
                     className="btn btn-primary"
                     disabled={submitting || data.frozen || data.balance <= 0}
                   >
-                    {submitting ? 'Envoi...' : 'Demander le retrait'}
+                    {submitting ? t('sending') : t('requestWithdrawal')}
                   </button>
                 </div>
               </form>
@@ -176,12 +177,12 @@ export default function AffiliateWithdrawPage() {
               {data.pendingWithdrawals.length > 0 && (
                 <div className="card bg-base-100 shadow">
                   <div className="card-body">
-                    <h2 className="card-title text-lg">Demandes en attente</h2>
+                    <h2 className="card-title text-lg">{t('pendingWithdrawals')}</h2>
                     <ul className="space-y-2">
                       {data.pendingWithdrawals.map((w) => (
                         <li key={w.id} className="flex justify-between items-center py-2 border-b border-base-300 last:border-0">
                           <span>{formatNumberForLocale(w.amount, loc)} {currencyLabel}</span>
-                          <span className="badge badge-warning">{w.status}</span>
+                          <span className="badge badge-warning">{t(withdrawalStatusToKey(w.status))}</span>
                         </li>
                       ))}
                     </ul>

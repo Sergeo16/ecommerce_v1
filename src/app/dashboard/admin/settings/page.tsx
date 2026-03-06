@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
   const [affiliateDefaultPercent, setAffiliateDefaultPercent] = useState(10);
   const [affiliateDefaultAmount, setAffiliateDefaultAmount] = useState(500);
   const [commissionsHoldForVerification, setCommissionsHoldForVerification] = useState(false);
+  const [supplierPayoutsHoldForVerification, setSupplierPayoutsHoldForVerification] = useState(false);
   const [commissionDelayValue, setCommissionDelayValue] = useState(0);
   const [commissionDelayUnit, setCommissionDelayUnit] = useState<'seconds' | 'minutes' | 'hours' | 'days' | 'months'>('seconds');
   const [defaultTheme, setDefaultTheme] = useState('business');
@@ -50,6 +51,12 @@ export default function AdminSettingsPage() {
   const [deliveryFeeDefault, setDeliveryFeeDefault] = useState(2000);
   const [deliveryFeeSuppliers, setDeliveryFeeSuppliers] = useState<Record<string, number>>({});
   const [suppliers, setSuppliers] = useState<{ id: string; companyName: string }[]>([]);
+  const [courierCommissionType, setCourierCommissionType] = useState<'percent' | 'amount'>('amount');
+  const [courierCommissionValue, setCourierCommissionValue] = useState(500);
+  const [courierCommissionSource, setCourierCommissionSource] = useState<'PRODUCT' | 'DELIVERY' | 'BOTH'>('DELIVERY');
+  const [courierCommissionSplitProduct, setCourierCommissionSplitProduct] = useState(50);
+  const [courierCommissionOverrides, setCourierCommissionOverrides] = useState<Record<string, { type: 'PERCENT' | 'AMOUNT'; value: number }>>({});
+  const [couriers, setCouriers] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
@@ -57,7 +64,8 @@ export default function AdminSettingsPage() {
       fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
       fetch('/api/admin/maintenance').then((r) => r.json()),
       fetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : []),
-    ]).then(([data, maintenanceData, suppliersList]) => {
+      fetch('/api/admin/couriers', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : {}),
+    ]).then(([data, maintenanceData, suppliersList, couriersResp]) => {
       const pm = (data.payment_modes as PaymentModes) ?? {};
       setFullUpfront(pm.fullUpfront ?? true);
       setPartialAdvance(pm.partialAdvance ?? true);
@@ -70,6 +78,7 @@ export default function AdminSettingsPage() {
           : 5
       );
       setCommissionsHoldForVerification(data.commissions_hold_for_verification === true);
+      setSupplierPayoutsHoldForVerification(data.supplier_payouts_hold_for_verification === true);
       const delay = data.commission_access_delay as { value?: number; unit?: string } | undefined;
       if (delay && typeof delay === 'object') {
         setCommissionDelayValue(typeof delay.value === 'number' && delay.value >= 0 ? delay.value : 0);
@@ -104,6 +113,40 @@ export default function AdminSettingsPage() {
       const sup = data.delivery_fee_suppliers;
       setDeliveryFeeSuppliers((typeof sup === 'object' && sup !== null ? sup : {}) as Record<string, number>);
       setSuppliers(Array.isArray(suppliersList) ? suppliersList : []);
+      const cc = data.courier_commission as {
+        default?: { type?: string; value?: number };
+        source?: string;
+        splitProductPercent?: number;
+        overrides?: Record<string, { type?: string; value?: number }>;
+      } | undefined;
+      if (cc && typeof cc === 'object') {
+        const def = cc.default;
+        if (def && typeof def === 'object') {
+          setCourierCommissionType(def.type === 'PERCENT' ? 'percent' : 'amount');
+          setCourierCommissionValue(typeof def.value === 'number' && def.value >= 0 ? def.value : 500);
+        }
+        setCourierCommissionSource(['PRODUCT', 'DELIVERY', 'BOTH'].includes(cc.source ?? '') ? (cc.source as 'PRODUCT' | 'DELIVERY' | 'BOTH') : 'DELIVERY');
+        setCourierCommissionSplitProduct(
+          typeof cc.splitProductPercent === 'number' && cc.splitProductPercent >= 0 && cc.splitProductPercent <= 100 ? cc.splitProductPercent : 50
+        );
+        setCourierCommissionOverrides(
+          cc.overrides && typeof cc.overrides === 'object'
+            ? Object.fromEntries(
+                Object.entries(cc.overrides)
+                  .filter(([, v]) => v && typeof v === 'object' && typeof (v as { value?: number }).value === 'number')
+                  .map(([k, v]) => [
+                    k,
+                    {
+                      type: (v as { type?: string }).type === 'PERCENT' ? ('PERCENT' as const) : ('AMOUNT' as const),
+                      value: (v as { value: number }).value,
+                    },
+                  ])
+              )
+            : {}
+        );
+      }
+      const courierList = (couriersResp as { couriers?: Array<{ id: string; label: string }> })?.couriers ?? [];
+      setCouriers(Array.isArray(courierList) ? courierList : []);
     })
     .catch(() => toast.error('Erreur lors du chargement.'))
     .finally(() => setLoading(false));
@@ -152,6 +195,7 @@ export default function AdminSettingsPage() {
         value: affiliateDefaultType === 'percent' ? affiliateDefaultPercent : affiliateDefaultAmount,
       });
       await putSetting('commissions_hold_for_verification', commissionsHoldForVerification);
+      await putSetting('supplier_payouts_hold_for_verification', supplierPayoutsHoldForVerification);
       await putSetting('commission_access_delay', {
         value: commissionDelayValue,
         unit: commissionDelayUnit,
@@ -169,6 +213,15 @@ export default function AdminSettingsPage() {
       await putSetting('allowed_currencies', allowedCurrencies.length > 0 ? allowedCurrencies : ['XOF']);
       await putSetting('delivery_fee_default', deliveryFeeDefault);
       await putSetting('delivery_fee_suppliers', deliveryFeeSuppliers);
+      await putSetting('courier_commission', {
+        default: {
+          type: courierCommissionType === 'percent' ? 'PERCENT' : 'AMOUNT',
+          value: courierCommissionValue,
+        },
+        source: courierCommissionSource,
+        splitProductPercent: courierCommissionSplitProduct,
+        overrides: courierCommissionOverrides,
+      });
       toast.success(t('saved'));
     } catch {
       toast.error('Erreur lors de l\'enregistrement.');
@@ -337,6 +390,20 @@ export default function AdminSettingsPage() {
           </div>
 
           <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('supplierPayoutsHoldForVerification') ?? 'Bloquer les paiements fournisseurs'}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('supplierPayoutsHoldForVerificationDesc') ?? 'Si activé, les revenus fournisseurs seront en attente. L\'admin pourra les libérer après vérification.'}</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={supplierPayoutsHoldForVerification}
+                onChange={(e) => setSupplierPayoutsHoldForVerification(e.target.checked)}
+              />
+              <span>{supplierPayoutsHoldForVerification ? t('active') : t('suspended')}</span>
+            </label>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
             <h2 className="font-semibold text-lg mb-2">{t('commissionAccessDelay') ?? 'Délai d\'accès aux commissions'}</h2>
             <p className="text-sm opacity-80 mb-4">{t('commissionAccessDelayDesc') ?? 'Délai avant que les commissions approuvées soient accessibles aux affiliés et livreurs. 0 = immédiat.'}</p>
             <div className="flex flex-wrap gap-3 items-center">
@@ -404,6 +471,201 @@ export default function AdminSettingsPage() {
                   value={affiliateDefaultAmount}
                   onChange={(e) => setAffiliateDefaultAmount(Math.max(0, Number(e.target.value) || 0))}
                 />
+              )}
+            </div>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('courierCommissionTitle')}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('courierCommissionDesc')}</p>
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-medium mb-2">{t('courierCommissionDefault')}</h3>
+                <div className="flex flex-wrap gap-4 items-end">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="courierCommissionType"
+                      className="radio radio-sm"
+                      checked={courierCommissionType === 'amount'}
+                      onChange={() => setCourierCommissionType('amount')}
+                    />
+                    <span>{t('courierCommissionFixed')}</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="courierCommissionType"
+                      className="radio radio-sm"
+                      checked={courierCommissionType === 'percent'}
+                      onChange={() => setCourierCommissionType('percent')}
+                    />
+                    <span>{t('courierCommissionPercent')}</span>
+                  </label>
+                  {courierCommissionType === 'amount' ? (
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      className="input input-bordered w-28"
+                      value={courierCommissionValue}
+                      onChange={(e) => setCourierCommissionValue(Math.max(0, Number(e.target.value) || 0))}
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      className="input input-bordered w-24"
+                      value={courierCommissionValue}
+                      onChange={(e) => setCourierCommissionValue(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    />
+                  )}
+                </div>
+              </div>
+              <div>
+                <h3 className="font-medium mb-2">{t('courierCommissionSource')}</h3>
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="courierCommissionSource"
+                      className="radio radio-sm"
+                      checked={courierCommissionSource === 'PRODUCT'}
+                      onChange={() => setCourierCommissionSource('PRODUCT')}
+                    />
+                    <span>{t('courierCommissionSourceProduct')}</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="courierCommissionSource"
+                      className="radio radio-sm"
+                      checked={courierCommissionSource === 'DELIVERY'}
+                      onChange={() => setCourierCommissionSource('DELIVERY')}
+                    />
+                    <span>{t('courierCommissionSourceDelivery')}</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="courierCommissionSource"
+                      className="radio radio-sm"
+                      checked={courierCommissionSource === 'BOTH'}
+                      onChange={() => setCourierCommissionSource('BOTH')}
+                    />
+                    <span>{t('courierCommissionSourceBoth')}</span>
+                  </label>
+                </div>
+                {courierCommissionSource === 'BOTH' && (
+                  <div className="form-control mt-3 max-w-xs">
+                    <label className="label">
+                      <span className="label-text">{t('courierCommissionSplitProduct')}</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      className="input input-bordered w-24"
+                      value={courierCommissionSplitProduct}
+                      onChange={(e) => setCourierCommissionSplitProduct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    />
+                  </div>
+                )}
+              </div>
+              {couriers.length > 0 && (
+                <div>
+                  <h3 className="font-medium mb-2">{t('courierCommissionOverrides')}</h3>
+                  <p className="text-sm opacity-70 mb-2">
+                    {t('courierCommissionOverrideDesc')}
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>{t('deliveryCourierLabel')}</th>
+                          <th>{t('courierCommissionTypeCol')}</th>
+                          <th>{t('amount')}</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {couriers.map((c) => {
+                          const ov = courierCommissionOverrides[c.id];
+                          return (
+                            <tr key={c.id}>
+                              <td>{c.label}</td>
+                              <td>
+                                <select
+                                  className="select select-bordered select-sm w-32"
+                                  value={ov?.type ?? ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (!v) {
+                                      setCourierCommissionOverrides((prev) => {
+                                        const next = { ...prev };
+                                        delete next[c.id];
+                                        return next;
+                                      });
+                                      return;
+                                    }
+                                    setCourierCommissionOverrides((prev) => ({
+                                      ...prev,
+                                      [c.id]: {
+                                        type: v as 'PERCENT' | 'AMOUNT',
+                                        value: prev[c.id]?.value ?? (v === 'PERCENT' ? 5 : 500),
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  <option value="">—</option>
+                                  <option value="AMOUNT">{t('courierCommissionFixed')}</option>
+                                  <option value="PERCENT">{t('courierCommissionPercent')}</option>
+                                </select>
+                              </td>
+                              <td>
+                                {ov && (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={ov.type === 'PERCENT' ? 0.5 : 100}
+                                    max={ov.type === 'PERCENT' ? 100 : undefined}
+                                    className="input input-bordered input-sm w-24"
+                                    value={ov.value}
+                                    onChange={(e) =>
+                                      setCourierCommissionOverrides((prev) => ({
+                                        ...prev,
+                                        [c.id]: { ...prev[c.id]!, value: Math.max(0, Number(e.target.value) || 0) },
+                                      }))
+                                    }
+                                  />
+                                )}
+                              </td>
+                              <td>
+                                {ov && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs text-error"
+                                    onClick={() =>
+                                      setCourierCommissionOverrides((prev) => {
+                                        const next = { ...prev };
+                                        delete next[c.id];
+                                        return next;
+                                      })
+                                    }
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           </div>

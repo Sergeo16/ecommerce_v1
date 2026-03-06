@@ -5,7 +5,12 @@ import { getCommissionAvailableCutoff } from '@/lib/monetization/commissions';
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || role !== 'AFFILIATE') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!userId || (role !== 'SUPPLIER' && role !== 'SUPER_ADMIN')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const cp = await prisma.companyProfile.findFirst({ where: { userId } });
+  if (!cp) return NextResponse.json({ balance: 0, currency: 'XOF', frozen: false, pendingWithdrawals: [] }, { status: 200 });
 
   const cutoff = await getCommissionAvailableCutoff();
   const [wallet, pendingWithdrawals, approvedSum, withdrawnSum] = await Promise.all([
@@ -15,8 +20,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     }),
-    prisma.commission.aggregate({
-      where: { userId, type: 'AFFILIATE', status: 'APPROVED', createdAt: { lte: cutoff } },
+    prisma.supplierPayout.aggregate({
+      where: { companyProfileId: cp.id, status: 'APPROVED', createdAt: { lte: cutoff } },
       _sum: { amount: true },
     }),
     prisma.withdrawalRequest.aggregate({
@@ -45,7 +50,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || role !== 'AFFILIATE') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!userId || (role !== 'SUPPLIER' && role !== 'SUPER_ADMIN')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const cp = await prisma.companyProfile.findFirst({ where: { userId } });
+  if (!cp) return NextResponse.json({ error: 'Profil fournisseur introuvable' }, { status: 403 });
 
   const body = await request.json();
   const amount = typeof body.amount === 'number' ? body.amount : parseFloat(body.amount);
@@ -53,14 +63,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Montant invalide' }, { status: 400 });
   }
 
-  const wallet = await prisma.wallet.findUnique({ where: { userId } });
-  if (!wallet || wallet.frozen) {
+  let wallet = await prisma.wallet.findUnique({ where: { userId } });
+  if (!wallet) {
+    wallet = await prisma.wallet.create({
+      data: { userId, balance: 0, currency: 'XOF' },
+    });
+  }
+  if (wallet.frozen) {
     return NextResponse.json({ error: 'Portefeuille indisponible' }, { status: 403 });
   }
+
   const cutoff = await getCommissionAvailableCutoff();
   const [approvedSum, withdrawnSum] = await Promise.all([
-    prisma.commission.aggregate({
-      where: { userId, type: 'AFFILIATE', status: 'APPROVED', createdAt: { lte: cutoff } },
+    prisma.supplierPayout.aggregate({
+      where: { companyProfileId: cp.id, status: 'APPROVED', createdAt: { lte: cutoff } },
       _sum: { amount: true },
     }),
     prisma.withdrawalRequest.aggregate({
