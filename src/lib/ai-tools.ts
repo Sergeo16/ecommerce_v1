@@ -4,7 +4,7 @@
  */
 
 export async function generateWhatsAppMessage(productName: string, price: number, link: string): Promise<string> {
-  return `🔥 ${productName} — seulement ${price} XOF !\n\nLien sécurisé : ${link}\n\nPasse ta commande en 1 clic. Livraison rapide partout au Bénin.`;
+  return `🔥 ${productName} — seulement ${price} F CFA !\n\nLien sécurisé : ${link}\n\nPasse ta commande en 1 clic. Livraison rapide partout au Bénin.`;
 }
 
 export async function generateTikTokScript(productName: string, keyFeature: string): Promise<string> {

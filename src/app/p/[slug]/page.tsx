@@ -9,6 +9,7 @@ import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { useCart } from '@/context/CartContext';
 import { CartLink } from '@/components/CartLink';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 /** URL absolue pour les images (uploads /api/...) afin qu’elles s’affichent correctement. */
 function toAbsoluteMediaUrl(url: string): string {
@@ -50,7 +51,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -213,7 +214,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             {product.category && (
               <p className="badge badge-ghost mt-2 text-base-content">{product.category.name}</p>
             )}
-            <p className="text-2xl text-primary font-bold mt-4">{product.price.toLocaleString()} {product.currency ?? 'XOF'}</p>
+            <p className="text-2xl text-primary font-bold mt-4">{formatNumberForLocale(product.price, locale)} {formatCurrencyForDisplay(product.currency ?? 'XOF')}</p>
             {product.description && (
               <div className="mt-4 text-base-content/80 prose prose-sm max-w-none">
                 <p className="whitespace-pre-wrap break-words">{product.description}</p>

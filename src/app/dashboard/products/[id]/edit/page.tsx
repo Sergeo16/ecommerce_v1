@@ -303,7 +303,7 @@ export default function EditProductPage() {
               <input type="number" min={0} step={0.01} className="input input-bordered w-32" value={price} onChange={(e) => setPrice(e.target.value)} required />
               <select className="select select-bordered select-sm w-28" value={currencyOption} onChange={(e) => setCurrencyOption(e.target.value)}>
                 {Array.from(new Set([...allowedCurrencies, currencyOption.trim().toUpperCase()].filter(Boolean))).map((c) => (
-                  <option key={c} value={c}>{c === 'XOF' ? `F CFA (${c})` : c}</option>
+                  <option key={c} value={c}>{c === 'XOF' ? 'F CFA' : c}</option>
                 ))}
               </select>
             </div>

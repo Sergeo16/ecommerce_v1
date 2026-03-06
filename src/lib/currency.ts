@@ -27,6 +27,27 @@ export function normalizeCurrencyCode(input: string): string {
   return compact;
 }
 
+/**
+ * Formate un nombre selon la locale : en français, séparateur de milliers "." (ex: 10.000).
+ */
+export function formatNumberForLocale(n: number, locale: 'fr' | 'en', options?: { minFraction?: number; maxFraction?: number }): string {
+  const { minFraction = 0, maxFraction = 2 } = options ?? {};
+  const formatted = n.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    minimumFractionDigits: minFraction,
+    maximumFractionDigits: maxFraction,
+  });
+  if (locale === 'fr') {
+    return formatted.replace(/\s/g, '.');
+  }
+  return formatted;
+}
+
+/** Affichage user : XOF → "F CFA", les autres devises inchangées. */
+export function formatCurrencyForDisplay(currency: string): string {
+  const code = normalizeCurrencyCode(currency);
+  return code === 'XOF' ? 'F CFA' : (currency || '').trim() || code;
+}
+
 /** Indique si la devise est acceptée pour le paiement en ligne. */
 export function isPaymentAcceptedCurrency(currency: string): boolean {
   const code = normalizeCurrencyCode(currency);

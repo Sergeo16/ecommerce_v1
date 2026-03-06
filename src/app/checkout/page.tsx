@@ -15,6 +15,8 @@ import { usePaymentRules, type PaymentRules } from '@/hooks/usePaymentRules';
 import {
   CANONICAL_CURRENCY,
   PAYMENT_ACCEPTED_CURRENCIES,
+  formatCurrencyForDisplay,
+  formatNumberForLocale,
   isPaymentAcceptedCurrency,
   convertToXOF,
 } from '@/lib/currency';
@@ -26,7 +28,7 @@ type PaymentMode = 'FULL_UPFRONT' | 'PARTIAL_ADVANCE' | 'PAY_ON_DELIVERY';
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { items: cartItems, clearCart, isReady: cartReady, reloadFromStorage, restoreFromCheckoutBackup, backupForCheckout } = useCart();
   const productId = searchParams.get('productId');
   const qtyFromUrl = Math.max(1, Math.min(999, parseInt(searchParams.get('qty') ?? '1', 10)));
@@ -223,7 +225,7 @@ function CheckoutContent() {
     const needsConversion =
       requiresPayment && !isPaymentAcceptedCurrency(curr);
     if (needsConversion && !conversionAccepted) {
-      toast.error(t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'));
+      toast.error(t('acceptConversion').replace('{currency}', formatCurrencyForDisplay(PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF')));
       return;
     }
     const ship: Record<string, unknown> = {
@@ -506,7 +508,7 @@ function CheckoutContent() {
                 {cartItems.map((i) => (
                   <li key={i.productId} className="flex justify-between items-center gap-2 py-1 border-b border-base-300 last:border-0">
                     <span className="font-medium break-words">{i.name}</span>
-                    <span className="text-primary font-bold shrink-0">{i.price.toLocaleString('fr-FR')} × {i.quantity}</span>
+                    <span className="text-primary font-bold shrink-0">{formatNumberForLocale(i.price, locale)} × {i.quantity}</span>
                   </li>
                 ))}
               </ul>
@@ -544,18 +546,18 @@ function CheckoutContent() {
                     </div>
                   </label>
                 </div>
-                <p className="text-primary font-bold mt-2">{product!.price.toLocaleString('fr-FR')} × {quantity} = {subtotal.toLocaleString('fr-FR')} {productCurrency}</p>
+                <p className="text-primary font-bold mt-2">{formatNumberForLocale(product!.price, locale)} × {quantity} = {formatNumberForLocale(subtotal, locale)} {formatCurrencyForDisplay(productCurrency)}</p>
               </>
             )}
-            <p className="text-sm opacity-80">+ {shippingAmount.toLocaleString('fr-FR')} {productCurrency} {t('shipping')}</p>
-            <p className="font-bold">{t('total')}: {total.toLocaleString('fr-FR')} {productCurrency}</p>
+            <p className="text-sm opacity-80">+ {formatNumberForLocale(shippingAmount, locale)} {formatCurrencyForDisplay(productCurrency)} {t('shipping')}</p>
+            <p className="font-bold">{t('total')}: {formatNumberForLocale(total, locale)} {formatCurrencyForDisplay(productCurrency)}</p>
           </div>
         </div>
         {needsConversion && (
           <div className="alert alert-warning mb-4 text-sm">
-            <span>{t('paymentCurrencyNotSupported').replace('{currency}', productCurrency)}</span>
-            <p className="mt-2 font-medium">{t('payInAcceptedCurrency').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF')}</p>
-            <p className="mt-1 opacity-90">{t('convertedAmount')}: {totalXOF.toLocaleString('fr-FR')} XOF</p>
+            <span>{t('paymentCurrencyNotSupported').replace('{currency}', formatCurrencyForDisplay(productCurrency))}</span>
+            <p className="mt-2 font-medium">{t('payInAcceptedCurrency').replace('{currency}', formatCurrencyForDisplay(PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'))}</p>
+            <p className="mt-1 opacity-90">{t('convertedAmount')}: {formatNumberForLocale(totalXOF, locale)} {formatCurrencyForDisplay('XOF')}</p>
             <label className="flex items-center gap-2 mt-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -563,7 +565,7 @@ function CheckoutContent() {
                 checked={conversionAccepted}
                 onChange={(e) => setConversionAccepted(e.target.checked)}
               />
-              <span>{t('acceptConversion').replace('{currency}', PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF')}</span>
+              <span>{t('acceptConversion').replace('{currency}', formatCurrencyForDisplay(PAYMENT_ACCEPTED_CURRENCIES[0] ?? 'XOF'))}</span>
             </label>
           </div>
         )}
@@ -619,7 +621,7 @@ function CheckoutContent() {
                       <span>
                         <span className="font-medium">{t('fullUpfront')}</span>
                         <span className="block text-xs opacity-70">
-                          {t('total')}: {total.toLocaleString('fr-FR')} {productCurrency}
+                          {t('total')}: {formatNumberForLocale(total, locale)} {formatCurrencyForDisplay(productCurrency)}
                         </span>
                       </span>
                     </label>
@@ -636,8 +638,8 @@ function CheckoutContent() {
                         <span className="font-medium">{t('partialAdvance')}</span>
                         <span className="block text-xs opacity-70">
                           {rulesOverride.minAdvancePercent}% {t('minAdvancePercent')} {needsConversion
-                            ? `${Math.round((totalXOF * rulesOverride.minAdvancePercent) / 100).toLocaleString('fr-FR')} XOF`
-                            : `${(total * rulesOverride.minAdvancePercent / 100).toLocaleString('fr-FR')} ${productCurrency}`}
+                            ? `${formatNumberForLocale(Math.round((totalXOF * rulesOverride.minAdvancePercent) / 100), locale)} ${formatCurrencyForDisplay('XOF')}`
+                            : `${formatNumberForLocale(total * rulesOverride.minAdvancePercent / 100, locale)} ${formatCurrencyForDisplay(productCurrency)}`}
                         </span>
                       </span>
                     </label>

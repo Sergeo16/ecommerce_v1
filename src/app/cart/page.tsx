@@ -7,10 +7,11 @@ import { AppLogo } from '@/components/AppLogo';
 import { CartLink } from '@/components/CartLink';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart, itemCount, backupForCheckout } = useCart();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
   if (items.length === 0) {
     return (
@@ -40,7 +41,7 @@ export default function CartPage() {
   }
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const firstCurrency = items[0]?.currency ?? 'XOF';
+  const firstCurrency = formatCurrencyForDisplay(items[0]?.currency ?? 'XOF');
 
   return (
     <div className="min-h-screen bg-base-200 flex flex-col">
@@ -65,7 +66,7 @@ export default function CartPage() {
                     {item.name}
                   </Link>
                   <p className="text-primary font-bold text-sm mt-0.5">
-                    {item.price.toLocaleString('fr-FR')} {item.currency}
+                    {formatNumberForLocale(item.price, locale)} {formatCurrencyForDisplay(item.currency ?? 'XOF')}
                   </p>
                   <div className="flex items-center gap-2 mt-2">
                     <div className="join">
@@ -105,7 +106,7 @@ export default function CartPage() {
                   </div>
                 </div>
                 <p className="font-bold shrink-0 text-right">
-                  {(item.price * item.quantity).toLocaleString('fr-FR')} {item.currency}
+                  {formatNumberForLocale(item.price * item.quantity, locale)} {formatCurrencyForDisplay(item.currency ?? 'XOF')}
                 </p>
               </div>
             ))}
@@ -113,7 +114,7 @@ export default function CartPage() {
           <div className="card-body border-t border-base-300 pt-4">
             <div className="flex justify-between items-center">
               <span className="font-semibold">{t('total')}:</span>
-              <span className="font-bold text-primary">{subtotal.toLocaleString('fr-FR')} {firstCurrency}</span>
+              <span className="font-bold text-primary">{formatNumberForLocale(subtotal, locale)} {firstCurrency}</span>
             </div>
           </div>
         </div>

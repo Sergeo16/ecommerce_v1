@@ -9,6 +9,7 @@ import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { useCart } from '@/context/CartContext';
 import { CartLink } from '@/components/CartLink';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -36,7 +37,7 @@ export default function CatalogPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { addItem, itemCount } = useCart();
   const categorySlug = searchParams.get('category');
   const [products, setProducts] = useState<Product[]>([]);
@@ -201,7 +202,7 @@ export default function CatalogPage() {
                   </figure>
                   <div className="card-body p-4 flex-1 flex flex-col min-w-0">
                     <h2 className="card-title text-sm line-clamp-2 text-base-content">{p.name}</h2>
-                    <p className="text-primary font-bold">{p.price.toLocaleString()} {p.currency ?? 'XOF'}</p>
+                    <p className="text-primary font-bold">{formatNumberForLocale(p.price, locale)} {formatCurrencyForDisplay(p.currency ?? 'XOF')}</p>
                     {p.companyProfile && (
                       <p className="text-xs text-base-content/70">{p.companyProfile.companyName}</p>
                     )}

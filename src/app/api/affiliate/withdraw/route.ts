@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+export async function GET(request: NextRequest) {
+  const userId = request.headers.get('x-user-id');
+  const role = request.headers.get('x-user-role');
+  if (!userId || role !== 'AFFILIATE') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const [wallet, pendingWithdrawals] = await Promise.all([
+    prisma.wallet.findUnique({ where: { userId } }),
+    prisma.withdrawalRequest.findMany({
+      where: { userId, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+  ]);
+
+  return NextResponse.json({
+    balance: wallet ? Number(wallet.balance) : 0,
+    currency: wallet?.currency ?? 'XOF',
+    frozen: wallet?.frozen ?? false,
+    pendingWithdrawals: pendingWithdrawals.map((w) => ({
+      id: w.id,
+      amount: Number(w.amount),
+      status: w.status,
+      createdAt: w.createdAt.toISOString(),
+    })),
+  });
+}
+
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');

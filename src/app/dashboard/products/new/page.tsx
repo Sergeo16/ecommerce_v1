@@ -327,7 +327,7 @@ export default function NewProductPage() {
                   onChange={(e) => setCurrencyOption(e.target.value)}
                 >
                   {allowedCurrencies.map((c) => (
-                    <option key={c} value={c}>{c === 'XOF' ? `F CFA (${c})` : c}</option>
+                    <option key={c} value={c}>{c === 'XOF' ? 'F CFA' : c}</option>
                   ))}
                 </select>
               </div>

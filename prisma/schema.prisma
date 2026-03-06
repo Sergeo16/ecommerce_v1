@@ -181,10 +181,11 @@ model Product {
   createdAt             DateTime    @default(now()) @map("created_at")
   updatedAt             DateTime    @updatedAt @map("updated_at")
 
-  attributes   ProductAttribute[]
-  variants     ProductVariant[]
-  orderItems   OrderItem[]
-  flashSales   FlashSale[]
+  attributes      ProductAttribute[]
+  variants        ProductVariant[]
+  orderItems      OrderItem[]
+  flashSales      FlashSale[]
+  affiliateLinks  AffiliateLink[]
 
   @@unique([companyProfileId, slug])
   @@index([categoryId])
@@ -309,6 +310,7 @@ model AffiliateLink {
   userId        String   @map("user_id")
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId     String?  @map("product_id")
+  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   slug          String   @unique
   referralCode  String   @map("referral_code") @unique
   utmSource     String?  @map("utm_source")
@@ -323,6 +325,7 @@ model AffiliateLink {
   commissions   Commission[]
 
   @@index([userId])
+  @@index([productId])
   @@map("affiliate_links")
 }
 

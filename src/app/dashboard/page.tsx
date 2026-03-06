@@ -8,10 +8,11 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { AdminNotificationsBell } from '@/components/AdminNotificationsBell';
+import { formatNumberForLocale } from '@/lib/currency';
 
 export default function DashboardPage() {
   const { user, token, isLoading, logout } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [affiliateStats, setAffiliateStats] = useState<Record<string, unknown> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -97,15 +98,15 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('platformRevenue')}</div>
-              <div className="stat-value text-primary">{(dashboard.revenue as number)?.toLocaleString()}</div>
+              <div className="stat-value text-primary">{formatNumberForLocale((dashboard.revenue as number) ?? 0, locale)}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('platformCommissions')}</div>
-              <div className="stat-value">{(dashboard.platformCommissions as number)?.toLocaleString()}</div>
+              <div className="stat-value">{formatNumberForLocale((dashboard.platformCommissions as number) ?? 0, locale)}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('pendingWithdrawals')}</div>
-              <div className="stat-value">{(dashboard.pendingWithdrawals as number)?.toLocaleString()}</div>
+              <div className="stat-value">{formatNumberForLocale((dashboard.pendingWithdrawals as number) ?? 0, locale)}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('deliveryRate')}</div>
@@ -118,11 +119,11 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('totalCommissions')}</div>
-              <div className="stat-value text-primary">{(affiliateStats.totalCommissions as number)?.toLocaleString()}</div>
+              <div className="stat-value text-primary">{formatNumberForLocale((affiliateStats.totalCommissions as number) ?? 0, locale)}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('pending')}</div>
-              <div className="stat-value">{(affiliateStats.pendingCommissions as number)?.toLocaleString()}</div>
+              <div className="stat-value">{formatNumberForLocale((affiliateStats.pendingCommissions as number) ?? 0, locale)}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('ranking')}</div>

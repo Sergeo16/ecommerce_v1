@@ -11,6 +11,7 @@ import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { sanitizeName, sanitizePhone, validatePhone, LIMITS } from '@/lib/validate-fields';
 import { deliveryStatusToKey, orderStatusToKey, type TranslationKey } from '@/lib/translations';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 type Order = {
   id: string;
@@ -79,7 +80,7 @@ type CourierOption = { id: string; label: string; email: string; phone: string |
 
 export default function AdminOrdersPage() {
   const { user, token } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const searchParams = useSearchParams();
   const highlightId = searchParams.get('highlight');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -242,7 +243,7 @@ export default function AdminOrdersPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl">
+    <div className="p-4 sm:p-6 w-full max-w-full">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <AppLogo className="btn btn-ghost btn-sm text-base" />
@@ -257,8 +258,8 @@ export default function AdminOrdersPage() {
       {loading ? (
         <span className="loading loading-spinner" />
       ) : (
-        <div className="overflow-x-auto -mx-2 sm:mx-0">
-          <table className="table table-zebra min-w-[640px]">
+        <div className="overflow-x-auto -mx-2 sm:mx-0 w-full">
+          <table className="table table-zebra w-full min-w-[640px]">
             <thead>
               <tr>
                 <th className="bg-base-100">N°</th>
@@ -266,8 +267,8 @@ export default function AdminOrdersPage() {
                 <th>Fournisseur</th>
                 <th>Total</th>
                 <th>Statut</th>
-                <th>Date</th>
-                <th className="min-w-[max(22ch,max-content)] w-px">Actions</th>
+                <th className="bg-base-100 min-w-[155px] shrink-0 border-l-2 border-r-2 border-base-content/40 px-3">Date</th>
+                <th className="bg-base-100 min-w-[96px] shrink-0 text-right border-r-2 border-base-content/40 px-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -284,7 +285,7 @@ export default function AdminOrdersPage() {
                       : [o.guestFirstName, o.guestLastName].filter(Boolean).join(' ') || o.guestEmail || 'Invité'}
                   </td>
                   <td>{o.companyProfile?.companyName ?? '-'}</td>
-                  <td>{Number(o.total).toLocaleString('fr-FR')} {o.currency}</td>
+                  <td>{formatNumberForLocale(Number(o.total), locale)} {formatCurrencyForDisplay(o.currency)}</td>
                   <td>
                     {/* Un seul statut : livraison si elle existe (évolue avec la commande), sinon statut commande */}
                     {o.delivery ? (
@@ -295,7 +296,7 @@ export default function AdminOrdersPage() {
                       <span className="badge badge-ghost">{t(orderStatusToKey(o.status))}</span>
                     )}
                   </td>
-                  <td className="text-sm opacity-80">
+                  <td className="text-sm shrink-0 bg-base-100 border-l-2 border-r-2 border-base-content/40 px-3 whitespace-nowrap">
                     {new Date(o.createdAt).toLocaleDateString('fr-FR', {
                       day: 'numeric',
                       month: 'short',
@@ -304,23 +305,30 @@ export default function AdminOrdersPage() {
                       minute: '2-digit',
                     })}
                   </td>
-                  <td className="min-w-[max(22ch,max-content)] align-top">
-                    <div className="flex flex-col gap-1 w-max">
+                  <td className="align-middle bg-base-100 shrink-0 border-r-2 border-base-content/40 px-3">
+                    <div className="flex flex-row gap-2 justify-end items-center min-w-0">
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm whitespace-nowrap w-full justify-start text-left"
+                        className="btn btn-ghost btn-sm btn-square"
                         onClick={() => openHistoryModal(o.id)}
                         title={t('orderHistory')}
+                        aria-label={t('orderHistory')}
                       >
-                        {t('orderHistory')}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </button>
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm whitespace-nowrap w-full justify-start text-left"
+                        className="btn btn-ghost btn-sm btn-square"
                         onClick={() => openDeliveryModal(o.id)}
                         title={t('assignDelivery')}
+                        aria-label={t('assignDelivery')}
                       >
-                        {t('assignDelivery')}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1m8-1V6a1 1 0 00-1-1h-1M6 5v11m0 0h8m-8 0V5" />
+                        </svg>
                       </button>
                     </div>
                   </td>
@@ -362,7 +370,7 @@ export default function AdminOrdersPage() {
                     {orderDetail.companyProfile?.user?.email ? ` — ${orderDetail.companyProfile.user.email}` : ''}
                   </p>
                   <p><strong>Articles :</strong> {orderDetail.items?.map((i) => `${i.product.name} × ${i.quantity}`).join(', ') ?? '—'}</p>
-                  <p><strong>Total :</strong> {Number(orderDetail.total).toLocaleString('fr-FR')} {orderDetail.currency}</p>
+                  <p><strong>Total :</strong> {formatNumberForLocale(Number(orderDetail.total), locale)} {formatCurrencyForDisplay(orderDetail.currency)}</p>
                   {orderDetail.delivery && (
                     <div className="mt-2 p-2 rounded-lg bg-base-200 space-y-1">
                       <p><strong>{t('deliveryStatusLabel')} :</strong> <span className="badge badge-neutral badge-sm">{t(deliveryStatusToKey(orderDetail.delivery.status))}</span></p>
@@ -490,7 +498,7 @@ export default function AdminOrdersPage() {
                     {historyOrderDetail.shippingAddress?.lat != null && historyOrderDetail.shippingAddress?.lng != null ? ` (GPS: ${Number(historyOrderDetail.shippingAddress.lat)}, ${Number(historyOrderDetail.shippingAddress.lng)})` : ''}
                   </p>
                   <p><strong>{t('historyItems')} :</strong> {historyOrderDetail.items?.map((i) => `${i.product.name} × ${i.quantity}`).join(', ') ?? '—'}</p>
-                  <p><strong>{t('historyTotal')} :</strong> {Number(historyOrderDetail.total).toLocaleString('fr-FR')} {historyOrderDetail.currency}</p>
+                  <p><strong>{t('historyTotal')} :</strong> {formatNumberForLocale(Number(historyOrderDetail.total), locale)} {formatCurrencyForDisplay(historyOrderDetail.currency)}</p>
                   {historyOrderDetail.delivery && (historyOrderDetail.delivery.courier || historyOrderDetail.delivery.externalCourierName) && (
                     <p><strong>{t('historyCourier')} :</strong> <span className="text-primary">{historyOrderDetail.delivery.courier ? `${historyOrderDetail.delivery.courier.firstName} ${historyOrderDetail.delivery.courier.lastName}${historyOrderDetail.delivery.courier.phone ? ` — ${historyOrderDetail.delivery.courier.phone}` : ''}` : `${historyOrderDetail.delivery.externalCourierName} (contact externe)${historyOrderDetail.delivery.externalCourierPhone ? ` — ${historyOrderDetail.delivery.externalCourierPhone}` : ''}`}</span></p>
                   )}

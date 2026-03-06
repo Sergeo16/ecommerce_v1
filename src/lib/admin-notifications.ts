@@ -4,6 +4,7 @@
  */
 import { prisma } from '@/lib/db';
 import { addEmailJob, addNotificationJob } from '@/lib/queue';
+import { formatNumberForLocale } from '@/lib/currency';
 
 export type AdminNotificationChannels = {
   platform?: boolean;
@@ -160,7 +161,7 @@ export async function notifyAdminOrderCreated(orderId: string): Promise<void> {
     `Adresse livraison (client): ${clientAddressLine}${clientLatLng ? ` — GPS: ${clientLatLng}` : ''}`,
     `Fournisseur: ${cp?.companyName ?? '-'} — Adresse: ${supplierAddressLine || '—'}${supplierLatLng ? ` — GPS: ${supplierLatLng}` : ''}${supplierPhone ? ` — Tél: ${supplierPhone}` : ''}${supplierEmail ? ` — ${supplierEmail}` : ''}`,
     `Articles: ${itemsSummary}`,
-    `Total: ${Number(order.total).toLocaleString('fr-FR')} ${order.currency} (avance: ${Number(order.advancePaid).toLocaleString('fr-FR')}, solde: ${Number(order.balanceDue).toLocaleString('fr-FR')})`,
+    `Total: ${formatNumberForLocale(Number(order.total), 'fr')} ${order.currency} (avance: ${formatNumberForLocale(Number(order.advancePaid), 'fr')}, solde: ${formatNumberForLocale(Number(order.balanceDue), 'fr')})`,
   ].join('\n');
 
   const config = await getAdminNotificationConfig();

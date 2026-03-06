@@ -9,6 +9,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
 import { deliveryStatusToKey } from '@/lib/translations';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 type DeliveryAddressInput = string | { address?: string; city?: string; phone?: string; lat?: number; lng?: number } | null;
 
@@ -44,7 +45,7 @@ function formatDeliveryAddress(raw: DeliveryAddressInput): string {
 
 export default function CourierMissionsPage() {
   const { user, token, isLoading } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
   const [reasonByMissionId, setReasonByMissionId] = useState<Record<string, string>>({});
@@ -195,7 +196,7 @@ export default function CourierMissionsPage() {
                     <p className="text-sm opacity-80"><strong>Adresse :</strong> {formatDeliveryAddress(m.deliveryAddress)}</p>
                   )}
                   {m.commissionAmount != null && (
-                    <p className="text-sm text-primary">{t('commissionLabel')} : {m.commissionAmount.toLocaleString()} XOF</p>
+                    <p className="text-sm text-primary">{t('commissionLabel')} : {formatNumberForLocale(m.commissionAmount, locale)} {formatCurrencyForDisplay('XOF')}</p>
                   )}
                   {m.customer && (
                     <p className="text-sm">Client : {m.customer.firstName} {m.customer.lastName}</p>
@@ -299,7 +300,7 @@ export default function CourierMissionsPage() {
                           <span>{t('deliveredOn')} {new Date(m.deliveredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
                         )}
                         {m.commissionAmount != null && (
-                          <span className="text-primary">{t('commissionLabel')} : {m.commissionAmount.toLocaleString()} XOF</span>
+                          <span className="text-primary">{t('commissionLabel')} : {formatNumberForLocale(m.commissionAmount, locale)} {formatCurrencyForDisplay('XOF')}</span>
                         )}
                       </div>
                     </div>

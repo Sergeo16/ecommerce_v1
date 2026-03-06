@@ -7,6 +7,7 @@ import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { useLocale } from '@/context/LocaleContext';
+import { formatCurrencyForDisplay, formatNumberForLocale } from '@/lib/currency';
 
 type Product = {
   id: string;
@@ -23,11 +24,13 @@ function ProductCard({
   product: p,
   token,
   t,
+  locale,
   onDeleted,
 }: {
   product: Product;
   token: string | null;
   t: (key: string) => string;
+  locale: string;
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -60,7 +63,7 @@ function ProductCard({
       </Link>
       <div className="card-body p-4">
         <h2 className="card-title text-sm line-clamp-2">{p.name}</h2>
-        <p className="text-primary font-bold">{p.price?.toLocaleString()} {p.currency ?? 'XOF'}</p>
+        <p className="text-primary font-bold">{formatNumberForLocale(p.price ?? 0, (locale ?? 'fr') as 'fr' | 'en')} {formatCurrencyForDisplay(p.currency ?? 'XOF')}</p>
         <div className="card-actions justify-end gap-1 mt-2">
           <Link href={`/p/${p.slug}?id=${p.id}`} className="btn btn-ghost btn-sm">{t('viewProduct')}</Link>
           <Link href={`/dashboard/products/${p.id}/edit`} className="btn btn-outline btn-sm">{t('editProduct')}</Link>
@@ -75,7 +78,7 @@ function ProductCard({
 
 export default function MyProductsPage() {
   const { user, token } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -135,6 +138,7 @@ export default function MyProductsPage() {
                 product={p}
                 token={token}
                 t={t}
+                locale={locale ?? 'fr'}
                 onDeleted={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}
               />
             ))}

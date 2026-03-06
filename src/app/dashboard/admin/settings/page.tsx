@@ -354,7 +354,7 @@ export default function AdminSettingsPage() {
                     value={deliveryFeeDefault}
                     onChange={(e) => setDeliveryFeeDefault(Math.max(0, Number(e.target.value) || 0))}
                   />
-                  <span className="text-sm">XOF</span>
+                  <span className="text-sm">F CFA</span>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -375,7 +375,7 @@ export default function AdminSettingsPage() {
                       <thead>
                         <tr>
                           <th>{t('companyName')}</th>
-                          <th>{t('deliveryFeeOverride')} (XOF)</th>
+                          <th>{t('deliveryFeeOverride')}</th>
                         </tr>
                       </thead>
                       <tbody>
