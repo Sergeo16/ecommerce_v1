@@ -17,17 +17,26 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  const categoryRows = role === 'SUPER_ADMIN'
+    ? await prisma.$queryRaw<{ id: string; category_slug: string | null }[]>`SELECT id, category_slug FROM affiliate_links`
+    : await prisma.$queryRaw<{ id: string; category_slug: string | null }[]>`
+        SELECT id, category_slug FROM affiliate_links WHERE user_id = ${userId}
+      `;
+  const categoryMap = new Map(categoryRows.map((r) => [r.id, r.category_slug]));
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const linksWithUrl = links.map((link) => {
+    const categorySlug = categoryMap.get(link.id) ?? (link as { categorySlug?: string }).categorySlug;
     let trackingLink: string;
     if (link.product?.slug) {
       trackingLink = `${baseUrl}/p/${link.product.slug}?ref=${link.referralCode}`;
-    } else if (link.categorySlug) {
-      trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(link.categorySlug)}&ref=${link.referralCode}`;
+    } else if (categorySlug) {
+      trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(categorySlug)}&ref=${link.referralCode}`;
     } else {
       trackingLink = `${baseUrl}/catalog?ref=${link.referralCode}`;
     }
-    return { ...link, trackingLink };
+    return { ...link, categorySlug, trackingLink };
   });
   return NextResponse.json(linksWithUrl);
 }
@@ -51,7 +60,6 @@ export async function POST(request: NextRequest) {
     data: {
       userId,
       productId: productId || null,
-      categorySlug: categorySlug || null,
       slug,
       referralCode,
       utmSource,
@@ -61,18 +69,26 @@ export async function POST(request: NextRequest) {
     include: { product: { select: { name: true, slug: true } } },
   });
 
+  if (categorySlug) {
+    await prisma.$executeRaw`
+      UPDATE affiliate_links SET category_slug = ${categorySlug}
+      WHERE id = ${link.id}
+    `;
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   let trackingLink: string;
   if (link.product?.slug) {
     trackingLink = `${baseUrl}/p/${link.product.slug}?ref=${link.referralCode}`;
-  } else if (link.categorySlug) {
-    trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(link.categorySlug)}&ref=${link.referralCode}`;
+  } else if (categorySlug) {
+    trackingLink = `${baseUrl}/catalog?category=${encodeURIComponent(categorySlug)}&ref=${link.referralCode}`;
   } else {
     trackingLink = `${baseUrl}/catalog?ref=${link.referralCode}`;
   }
 
   return NextResponse.json({
     ...link,
+    categorySlug,
     trackingLink,
     shareUrl: trackingLink,
   });

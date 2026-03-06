@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DeliveryStatus } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { approveCommissionsOnDelivery } from '@/lib/monetization';
 
 const DECISION_STATUSES = ['COURIER_ACCEPTED', 'ON_HOLD', 'COURIER_REFUSED'];
 const PROGRESS_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'FAILED', 'RETURNED'];
@@ -77,6 +78,9 @@ export async function PATCH(
       where: { id: delivery.orderId },
       data: { status: 'DELIVERED' },
     });
+    await approveCommissionsOnDelivery(delivery.orderId).catch((err) =>
+      console.error('[Courier] Commission approval on delivery failed:', err)
+    );
   }
 
   // Quand un livreur accepte la mission, notifier les autres livreurs (qui avaient pu la voir en disponible)

@@ -57,6 +57,10 @@ type OrderDetail = {
     user?: { firstName: string; lastName: string; email: string; phone: string | null };
   };
   items: { product: { name: string }; quantity: number }[];
+  affiliateLinkId?: string | null;
+  affiliateOverridePercent?: number | null;
+  affiliateOverrideAmount?: number | null;
+  affiliateLink?: { referralCode: string; commissionPercent?: number | null; commissionAmount?: number | null } | null;
   delivery?: {
     id: string;
     status: string;
@@ -97,6 +101,9 @@ export default function AdminOrdersPage() {
   const [historyModalOrderId, setHistoryModalOrderId] = useState<string | null>(null);
   const [historyOrderDetail, setHistoryOrderDetail] = useState<OrderDetail | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [orderCommissionPercent, setOrderCommissionPercent] = useState<string>('');
+  const [orderCommissionAmount, setOrderCommissionAmount] = useState<string>('');
+  const [commissionSaving, setCommissionSaving] = useState(false);
 
   useEffect(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
@@ -119,6 +126,8 @@ export default function AdminOrdersPage() {
       setSelectedCourierId('');
       setExternalName('');
       setExternalPhone('');
+      setOrderCommissionPercent('');
+      setOrderCommissionAmount('');
       if (!token) return;
       Promise.all([
         fetch(`/api/admin/orders/${orderId}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
@@ -127,6 +136,8 @@ export default function AdminOrdersPage() {
         setOrderDetail(orderData.error ? null : orderData);
         setCouriers(couriersData.couriers ?? []);
         if (couriersData.couriers?.length) setSelectedCourierId(couriersData.couriers[0].id);
+        if (!orderData.error && orderData.affiliateOverridePercent != null) setOrderCommissionPercent(String(orderData.affiliateOverridePercent));
+        if (!orderData.error && orderData.affiliateOverrideAmount != null) setOrderCommissionAmount(String(orderData.affiliateOverrideAmount));
       });
     },
     [token]
@@ -232,6 +243,33 @@ export default function AdminOrdersPage() {
       setAssignSubmitting(false);
     }
   }, [deliveryModalOrderId, token, assignMode, selectedCourierId, externalName, externalPhone, closeDeliveryModal]);
+
+  const handleSaveCommissionOverride = useCallback(async () => {
+    if (!deliveryModalOrderId || !token || !orderDetail?.affiliateLinkId) return;
+    setCommissionSaving(true);
+    try {
+      const pct = orderCommissionPercent.trim() === '' ? null : parseFloat(orderCommissionPercent);
+      const amt = orderCommissionAmount.trim() === '' ? null : parseFloat(orderCommissionAmount);
+      const body = {
+        affiliateOverridePercent: pct != null && !Number.isNaN(pct) && pct >= 0 && pct <= 100 ? pct : null,
+        affiliateOverrideAmount: amt != null && !Number.isNaN(amt) && amt >= 0 ? amt : null,
+      };
+      const res = await fetch(`/api/admin/orders/${deliveryModalOrderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erreur');
+        return;
+      }
+      toast.success('Commission enregistrée.');
+      setOrderDetail((prev) => prev ? { ...prev, affiliateOverridePercent: pct ?? undefined, affiliateOverrideAmount: amt ?? undefined } : null);
+    } finally {
+      setCommissionSaving(false);
+    }
+  }, [deliveryModalOrderId, token, orderDetail, orderCommissionPercent, orderCommissionAmount]);
 
   if (user?.role !== 'SUPER_ADMIN') {
     return (
@@ -371,6 +409,45 @@ export default function AdminOrdersPage() {
                   </p>
                   <p><strong>Articles :</strong> {orderDetail.items?.map((i) => `${i.product.name} × ${i.quantity}`).join(', ') ?? '—'}</p>
                   <p><strong>Total :</strong> {formatNumberForLocale(Number(orderDetail.total), locale)} {formatCurrencyForDisplay(orderDetail.currency)}</p>
+                  {orderDetail.affiliateLinkId && (
+                    <div className="mt-2 p-2 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                      <p className="font-medium text-sm">{t('affiliateDefaultCommission')} (override)</p>
+                      <p className="text-xs opacity-80">Lien : {orderDetail.affiliateLink?.referralCode ?? '—'}
+                        {orderDetail.affiliateLink?.commissionPercent != null && ` · ${orderDetail.affiliateLink.commissionPercent}%`}
+                        {orderDetail.affiliateLink?.commissionAmount != null && orderDetail.affiliateLink.commissionPercent == null && ` · ${formatNumberForLocale(Number(orderDetail.affiliateLink.commissionAmount), locale)} F`}
+                      </p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          placeholder="%"
+                          className="input input-bordered input-sm w-20"
+                          value={orderCommissionPercent}
+                          onChange={(e) => setOrderCommissionPercent(e.target.value)}
+                        />
+                        <span className="text-sm opacity-70">ou</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={100}
+                          placeholder="F CFA"
+                          className="input input-bordered input-sm w-24"
+                          value={orderCommissionAmount}
+                          onChange={(e) => setOrderCommissionAmount(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          disabled={commissionSaving}
+                          onClick={handleSaveCommissionOverride}
+                        >
+                          {commissionSaving ? t('loading') : t('save')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {orderDetail.delivery && (
                     <div className="mt-2 p-2 rounded-lg bg-base-200 space-y-1">
                       <p><strong>{t('deliveryStatusLabel')} :</strong> <span className="badge badge-neutral badge-sm">{t(deliveryStatusToKey(orderDetail.delivery.status))}</span></p>

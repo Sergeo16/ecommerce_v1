@@ -29,6 +29,12 @@ export default function AdminSettingsPage() {
   const [payOnDelivery, setPayOnDelivery] = useState(true);
   const [minAdvancePercent, setMinAdvancePercent] = useState(30);
   const [platformCommissionPercent, setPlatformCommissionPercent] = useState(5);
+  const [affiliateDefaultType, setAffiliateDefaultType] = useState<'percent' | 'amount'>('percent');
+  const [affiliateDefaultPercent, setAffiliateDefaultPercent] = useState(10);
+  const [affiliateDefaultAmount, setAffiliateDefaultAmount] = useState(500);
+  const [commissionsHoldForVerification, setCommissionsHoldForVerification] = useState(false);
+  const [commissionDelayValue, setCommissionDelayValue] = useState(0);
+  const [commissionDelayUnit, setCommissionDelayUnit] = useState<'seconds' | 'minutes' | 'hours' | 'days' | 'months'>('seconds');
   const [defaultTheme, setDefaultTheme] = useState('business');
   const [deliveryTrackingEnabled, setDeliveryTrackingEnabled] = useState(true);
   const [supplierIdentityVisible, setSupplierIdentityVisible] = useState(false);
@@ -63,6 +69,19 @@ export default function AdminSettingsPage() {
           ? (pct as { platformPercent: number }).platformPercent
           : 5
       );
+      setCommissionsHoldForVerification(data.commissions_hold_for_verification === true);
+      const delay = data.commission_access_delay as { value?: number; unit?: string } | undefined;
+      if (delay && typeof delay === 'object') {
+        setCommissionDelayValue(typeof delay.value === 'number' && delay.value >= 0 ? delay.value : 0);
+        const u = delay.unit as string;
+        setCommissionDelayUnit(['seconds', 'minutes', 'hours', 'days', 'months'].includes(u) ? u as 'seconds' | 'minutes' | 'hours' | 'days' | 'months' : 'seconds');
+      }
+      const affDef = data.affiliate_default_commission as { type?: string; percent?: number; amount?: number; value?: number } | undefined;
+      if (affDef && typeof affDef === 'object') {
+        setAffiliateDefaultType(affDef.type === 'AMOUNT' ? 'amount' : 'percent');
+        setAffiliateDefaultPercent(typeof affDef.percent === 'number' ? affDef.percent : typeof affDef.value === 'number' && affDef.type !== 'AMOUNT' ? affDef.value : 10);
+        setAffiliateDefaultAmount(typeof affDef.amount === 'number' ? affDef.amount : typeof affDef.value === 'number' && affDef.type === 'AMOUNT' ? affDef.value : 500);
+      }
       setDefaultTheme(typeof data.theme === 'string' ? data.theme : 'business');
       const tracking = data.delivery_tracking_enabled;
       setDeliveryTrackingEnabled(tracking === false ? false : true);
@@ -125,6 +144,17 @@ export default function AdminSettingsPage() {
         platformPercent: platformCommissionPercent,
         maxAffiliatePercent: 30,
         courierFixed: 1500,
+      });
+      await putSetting('affiliate_default_commission', {
+        type: affiliateDefaultType === 'amount' ? 'AMOUNT' : 'PERCENT',
+        percent: affiliateDefaultType === 'percent' ? affiliateDefaultPercent : undefined,
+        amount: affiliateDefaultType === 'amount' ? affiliateDefaultAmount : undefined,
+        value: affiliateDefaultType === 'percent' ? affiliateDefaultPercent : affiliateDefaultAmount,
+      });
+      await putSetting('commissions_hold_for_verification', commissionsHoldForVerification);
+      await putSetting('commission_access_delay', {
+        value: commissionDelayValue,
+        unit: commissionDelayUnit,
       });
       await putSetting('theme', defaultTheme);
       await putSetting('delivery_tracking_enabled', deliveryTrackingEnabled);
@@ -289,6 +319,92 @@ export default function AdminSettingsPage() {
                 value={platformCommissionPercent}
                 onChange={(e) => setPlatformCommissionPercent(Number(e.target.value) || 0)}
               />
+            </div>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('commissionsHoldForVerification')}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('commissionsHoldForVerificationDesc')}</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={commissionsHoldForVerification}
+                onChange={(e) => setCommissionsHoldForVerification(e.target.checked)}
+              />
+              <span>{commissionsHoldForVerification ? t('active') : t('suspended')}</span>
+            </label>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('commissionAccessDelay') ?? 'Délai d\'accès aux commissions'}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('commissionAccessDelayDesc') ?? 'Délai avant que les commissions approuvées soient accessibles aux affiliés et livreurs. 0 = immédiat.'}</p>
+            <div className="flex flex-wrap gap-3 items-center">
+              <input
+                type="number"
+                min={0}
+                className="input input-bordered w-24"
+                value={commissionDelayValue}
+                onChange={(e) => setCommissionDelayValue(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <select
+                className="select select-bordered"
+                value={commissionDelayUnit}
+                onChange={(e) => setCommissionDelayUnit(e.target.value as 'seconds' | 'minutes' | 'hours' | 'days' | 'months')}
+              >
+                <option value="seconds">{t('commissionDelaySeconds') ?? 'Secondes'}</option>
+                <option value="minutes">{t('commissionDelayMinutes') ?? 'Minutes'}</option>
+                <option value="hours">{t('commissionDelayHours') ?? 'Heures'}</option>
+                <option value="days">{t('commissionDelayDays') ?? 'Jours'}</option>
+                <option value="months">{t('commissionDelayMonths') ?? 'Mois'}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-base-100 rounded-lg shadow p-4 sm:p-6">
+            <h2 className="font-semibold text-lg mb-2">{t('affiliateDefaultCommission')}</h2>
+            <p className="text-sm opacity-80 mb-4">{t('affiliateDefaultCommissionDesc')}</p>
+            <div className="flex flex-wrap gap-4 items-end">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="affiliateDefaultType"
+                  className="radio radio-sm"
+                  checked={affiliateDefaultType === 'percent'}
+                  onChange={() => setAffiliateDefaultType('percent')}
+                />
+                <span>{t('affiliateCommissionPercent')}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="affiliateDefaultType"
+                  className="radio radio-sm"
+                  checked={affiliateDefaultType === 'amount'}
+                  onChange={() => setAffiliateDefaultType('amount')}
+                />
+                <span>{t('affiliateCommissionAmount')}</span>
+              </label>
+              {affiliateDefaultType === 'percent' ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  className="input input-bordered w-24"
+                  value={affiliateDefaultPercent}
+                  onChange={(e) => setAffiliateDefaultPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                />
+              ) : (
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  className="input input-bordered w-28"
+                  value={affiliateDefaultAmount}
+                  onChange={(e) => setAffiliateDefaultAmount(Math.max(0, Number(e.target.value) || 0))}
+                />
+              )}
             </div>
           </div>
 

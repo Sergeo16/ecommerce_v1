@@ -263,9 +263,11 @@ model Order {
   advancePaid         Decimal         @default(0) @map("advance_paid") @db.Decimal(12, 2)
   balanceDue          Decimal         @default(0) @map("balance_due") @db.Decimal(12, 2)
   currency            String          @default("XOF")
-  affiliateLinkId     String?         @map("affiliate_link_id")
-  affiliateLink       AffiliateLink?  @relation(fields: [affiliateLinkId], references: [id])
-  shippingAddress     Json            @map("shipping_address")
+  affiliateLinkId        String?         @map("affiliate_link_id")
+  affiliateLink          AffiliateLink?  @relation(fields: [affiliateLinkId], references: [id])
+  affiliateOverridePercent Decimal?      @map("affiliate_override_percent") @db.Decimal(5, 2)
+  affiliateOverrideAmount  Decimal?      @map("affiliate_override_amount") @db.Decimal(12, 2)
+  shippingAddress        Json            @map("shipping_address")
   notes               String?         @db.Text
   metadata            Json?
   createdAt           DateTime        @default(now()) @map("created_at")
@@ -306,21 +308,23 @@ model OrderItem {
 
 // ============ AFFILIATION ============
 model AffiliateLink {
-  id            String   @id @default(cuid())
-  userId        String   @map("user_id")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId     String?  @map("product_id")
-  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  categorySlug  String?  @map("category_slug")
-  slug          String   @unique
-  referralCode  String   @map("referral_code") @unique
-  utmSource     String?  @map("utm_source")
-  utmMedium     String?  @map("utm_medium")
-  utmCampaign   String?  @map("utm_campaign")
-  clickCount    Int      @default(0) @map("click_count")
-  conversionCount Int    @default(0) @map("conversion_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId        String?  @map("product_id")
+  product          Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categorySlug     String?  @map("category_slug")
+  slug             String   @unique
+  referralCode     String   @map("referral_code") @unique
+  utmSource        String?  @map("utm_source")
+  utmMedium        String?  @map("utm_medium")
+  utmCampaign      String?  @map("utm_campaign")
+  commissionPercent Decimal? @map("commission_percent") @db.Decimal(5, 2)
+  commissionAmount  Decimal? @map("commission_amount") @db.Decimal(12, 2)
+  clickCount       Int      @default(0) @map("click_count")
+  conversionCount  Int      @default(0) @map("conversion_count")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   orders        Order[]
   commissions   Commission[]
@@ -340,6 +344,7 @@ enum CommissionType {
 enum CommissionStatus {
   PENDING
   APPROVED
+  ON_HOLD
   PAID
   CANCELLED
 }

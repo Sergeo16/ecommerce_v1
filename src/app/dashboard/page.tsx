@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const { t, locale } = useLocale();
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [affiliateStats, setAffiliateStats] = useState<Record<string, unknown> | null>(null);
+  const [courierStats, setCourierStats] = useState<Record<string, unknown> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +32,12 @@ export default function DashboardPage() {
         .then((r) => r.json())
         .then(setAffiliateStats)
         .catch(() => setAffiliateStats(null));
+    }
+    if (user.role === 'COURIER') {
+      fetch('/api/courier/stats', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then(setCourierStats)
+        .catch(() => setCourierStats(null));
     }
   }, [token, user]);
 
@@ -116,10 +123,16 @@ export default function DashboardPage() {
         )}
 
         {user.role === 'AFFILIATE' && affiliateStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="stat bg-base-100 rounded-lg shadow">
-              <div className="stat-title">{t('totalCommissions')}</div>
-              <div className="stat-value text-primary">{formatNumberForLocale((affiliateStats.totalCommissions as number) ?? 0, locale)}</div>
+              <div className="stat-title">{t('availableCommissions')}</div>
+              <div className="stat-value text-primary">{formatNumberForLocale((affiliateStats.availableCommissions as number) ?? (affiliateStats.totalCommissions as number) ?? 0, locale)}</div>
+              <div className="stat-desc">{t('availableCommissionsDesc')}</div>
+            </div>
+            <div className="stat bg-base-100 rounded-lg shadow">
+              <div className="stat-title">{t('heldCommissions')}</div>
+              <div className="stat-value">{formatNumberForLocale((affiliateStats.heldCommissions as number) ?? 0, locale)}</div>
+              <div className="stat-desc">{t('heldCommissionsDesc')}</div>
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('pending')}</div>
@@ -132,12 +145,37 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {user.role === 'COURIER' && courierStats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="stat bg-base-100 rounded-lg shadow">
+              <div className="stat-title">{t('availableCommissions')}</div>
+              <div className="stat-value text-primary">{formatNumberForLocale((courierStats.availableCommissions as number) ?? 0, locale)}</div>
+              <div className="stat-desc">{t('availableCommissionsDesc')}</div>
+            </div>
+            <div className="stat bg-base-100 rounded-lg shadow">
+              <div className="stat-title">{t('heldCommissions')}</div>
+              <div className="stat-value">{formatNumberForLocale((courierStats.heldCommissions as number) ?? 0, locale)}</div>
+              <div className="stat-desc">{t('heldCommissionsDesc')}</div>
+            </div>
+            <div className="stat bg-base-100 rounded-lg shadow">
+              <div className="stat-title">{t('pending')}</div>
+              <div className="stat-value">{formatNumberForLocale((courierStats.pendingCommissions as number) ?? 0, locale)}</div>
+            </div>
+            <div className="stat bg-base-100 rounded-lg shadow">
+              <div className="stat-title">{t('totalCommissions')}</div>
+              <div className="stat-value">{formatNumberForLocale((courierStats.totalCommissions as number) ?? 0, locale)}</div>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-4">
           {user.role === 'SUPER_ADMIN' && (
             <>
               <Link href="/dashboard/admin/settings" className="btn btn-outline">{t('globalSettings')}</Link>
               <Link href="/dashboard/admin/users" className="btn btn-outline">{t('users')}</Link>
               <Link href="/dashboard/admin/orders" className="btn btn-outline">Commandes</Link>
+              <Link href="/dashboard/admin/affiliates" className="btn btn-outline">Affiliés</Link>
+              <Link href="/dashboard/admin/commissions" className="btn btn-outline">Commissions</Link>
             </>
           )}
           {user.role === 'AFFILIATE' && (
@@ -153,7 +191,10 @@ export default function DashboardPage() {
             </>
           )}
           {user.role === 'COURIER' && (
-            <Link href="/dashboard/courier/missions" className="btn btn-primary">{t('myMissions')}</Link>
+            <>
+              <Link href="/dashboard/courier/missions" className="btn btn-primary">{t('myMissions')}</Link>
+              <Link href="/dashboard/courier/withdraw" className="btn btn-outline">{t('requestWithdrawal')}</Link>
+            </>
           )}
           {(user.role === 'CLIENT' || user.role === 'AFFILIATE') && (
             <Link href="/catalog" className="btn btn-primary">{t('seeCatalog')}</Link>

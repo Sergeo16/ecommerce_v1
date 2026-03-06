@@ -5,4 +5,5 @@
  */
 
 export * from "./commissions";
+export * from "./commissions-on-delivery";
 export * from "./subscriptions";
