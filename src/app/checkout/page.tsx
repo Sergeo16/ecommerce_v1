@@ -21,6 +21,7 @@ import {
   convertToXOF,
 } from '@/lib/currency';
 import { useShippingFee } from '@/hooks/useShippingFee';
+import { getAffiliateRef, clearAffiliateRef } from '@/components/AffiliateRefTracker';
 
 type ProductInfo = { id: string; name: string; price: number; currency: string; companyProfileId?: string };
 type PaymentMode = 'FULL_UPFRONT' | 'PARTIAL_ADVANCE' | 'PAY_ON_DELIVERY';
@@ -277,6 +278,8 @@ function CheckoutContent() {
       if (requiresPayment && paymentConfig?.kkiapayEnabled && currencyForPayment === 'XOF') {
         body.paymentGateway = 'KKIAPAY';
       }
+      const affiliateRef = getAffiliateRef();
+      if (affiliateRef) body.referralCode = affiliateRef;
       const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) });
       const text = await res.text();
       let data: {
@@ -334,6 +337,7 @@ function CheckoutContent() {
                 if (!verifyRes.ok) throw new Error(verifyData.error ?? 'Vérification échouée');
                 setOrderNumber(data.order!.orderNumber ?? null);
                 clearCart();
+                clearAffiliateRef();
                 toast.success(t('orderSuccess'));
                 resolve();
               } catch (e) {
@@ -362,6 +366,7 @@ function CheckoutContent() {
       } else {
         setOrderNumber(data.order?.orderNumber ?? null);
         clearCart();
+        clearAffiliateRef();
         toast.success(t('orderSuccess'));
       }
     } catch (err) {

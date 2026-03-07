@@ -75,7 +75,14 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   const body = await request.json();
   const items = Array.isArray(body.items) ? body.items : [];
-  const affiliateLinkId = typeof body.affiliateLinkId === 'string' ? body.affiliateLinkId : null;
+  let affiliateLinkId = typeof body.affiliateLinkId === 'string' ? body.affiliateLinkId : null;
+  if (!affiliateLinkId && typeof body.referralCode === 'string' && body.referralCode.trim()) {
+    const link = await prisma.affiliateLink.findFirst({
+      where: { referralCode: body.referralCode.trim() },
+      select: { id: true },
+    });
+    if (link) affiliateLinkId = link.id;
+  }
   const paymentMode = (body.paymentMode as PaymentModeOrder) ?? 'FULL_UPFRONT';
   const advancePercent = typeof body.advancePercent === 'number' ? body.advancePercent : null;
   const shippingAddress = body.shippingAddress && typeof body.shippingAddress === 'object' ? body.shippingAddress : null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { addEmailJob, addNotificationJob } from '@/lib/queue';
+import { computeCourierCommissionAmount } from '@/lib/monetization/courier-commission';
 
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -15,9 +16,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'deliveryId requis' }, { status: 400 });
   }
 
+  const deliveryBefore = await prisma.delivery.findFirst({
+    where: { id: deliveryId, courierId: null, status: 'PENDING' },
+    include: { order: { select: { subtotal: true, shippingAmount: true } } },
+  });
+  if (!deliveryBefore) {
+    return NextResponse.json({ error: 'ALREADY_TAKEN' }, { status: 409 });
+  }
+
+  const subtotal = Number(deliveryBefore.order?.subtotal ?? 0);
+  const shippingAmount = Number(deliveryBefore.order?.shippingAmount ?? 0);
+  const commissionAmount = await computeCourierCommissionAmount({
+    subtotal,
+    shippingAmount,
+    courierId: userId,
+  });
+
   const updated = await prisma.delivery.updateMany({
     where: { id: deliveryId, courierId: null, status: 'PENDING' },
-    data: { courierId: userId, status: 'ASSIGNED' },
+    data: {
+      courierId: userId,
+      status: 'ASSIGNED',
+      commissionAmount: commissionAmount > 0 ? commissionAmount : null,
+    },
   });
 
   if (updated.count === 0) {

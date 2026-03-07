@@ -147,6 +147,16 @@ export async function getPlatformCommissionPercent(
   });
   if (globalRule) return Number(globalRule.platformPercent);
 
-  // 5. Défaut (ex: 10%)
+  // 5. Paramètre admin (Settings platform_commission_percent ou commission_rules.platformPercent)
+  const platformSetting = await getSettingJson<number>('platform_commission_percent');
+  if (typeof platformSetting === 'number' && platformSetting >= 0 && platformSetting <= 100) {
+    return platformSetting;
+  }
+  const commissionRules = await getSettingJson<{ platformPercent?: number }>('commission_rules');
+  if (commissionRules && typeof commissionRules === 'object' && typeof commissionRules.platformPercent === 'number' && commissionRules.platformPercent >= 0 && commissionRules.platformPercent <= 100) {
+    return commissionRules.platformPercent;
+  }
+
+  // 6. Défaut (10%) - uniquement si aucun paramètre admin
   return 10;
 }

@@ -7,6 +7,7 @@
  */
 
 import { prisma } from '@/lib/db';
+import { computeCourierCommissionAmount } from './courier-commission';
 import {
   getPlatformCommissionPercent,
   getAffiliateDefaultCommission,
@@ -52,25 +53,15 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
     categoryId: firstItemCategoryId,
   });
 
-  const platformAmount = Math.round((orderTotal * platformPercent) / 100 * 100) / 100;
+  const platformAmountGross = Math.round((orderTotal * platformPercent) / 100 * 100) / 100;
 
   const existingPlatform = order.commissions.find((c) => c.type === 'PLATFORM');
   const existingAffiliate = order.commissions.find((c) => c.type === 'AFFILIATE');
   const existingCourier = order.commissions.find((c) => c.type === 'COURIER');
 
+  // 1. Calculer la commission affilié
   let affiliateAmount = 0;
-
-  if (!existingPlatform) {
-    await prisma.commission.create({
-      data: {
-        orderId,
-        type: 'PLATFORM',
-        amount: platformAmount,
-        percent: platformPercent,
-        status,
-      },
-    });
-  }
+  let percentUsed: number | null = null;
 
   if (order.affiliateLinkId && order.affiliateLink) {
     const defaultConfig = await getAffiliateDefaultCommission();
@@ -81,9 +72,6 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
       linkCommissionAmount: order.affiliateLink.commissionAmount,
       defaultConfig,
     });
-
-    let affiliateAmount: number;
-    let percentUsed: number | null;
 
     if (resolved.type === 'AMOUNT') {
       affiliateAmount = Math.round(resolved.value * 100) / 100;
@@ -141,13 +129,52 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
     }
   }
 
-  if (delivery?.courierId && delivery.commissionAmount != null && Number(delivery.commissionAmount) > 0 && !existingCourier) {
+  // Commission livreur : utiliser delivery.commissionAmount si défini, sinon calculer (fallback si assign manquant ou ancienne livraison)
+  let courierCommissionAmount = delivery?.courierId && delivery.commissionAmount != null && Number(delivery.commissionAmount) > 0
+    ? Number(delivery.commissionAmount)
+    : 0;
+  if (delivery?.courierId && courierCommissionAmount <= 0) {
+    courierCommissionAmount = await computeCourierCommissionAmount({
+      subtotal: orderTotal,
+      shippingAmount: Number(order.shippingAmount ?? 0),
+      courierId: delivery.courierId,
+    });
+    if (courierCommissionAmount > 0) {
+      await prisma.delivery.update({
+        where: { orderId },
+        data: { commissionAmount: courierCommissionAmount },
+      });
+    }
+  }
+  if (delivery?.courierId && courierCommissionAmount > 0 && !existingCourier) {
     await prisma.commission.create({
       data: {
         orderId,
         userId: delivery.courierId,
         type: 'COURIER',
-        amount: Number(delivery.commissionAmount),
+        amount: courierCommissionAmount,
+        status,
+      },
+    });
+  }
+
+  // Commission plateforme = commission brute - (affilié + livreur)
+  const affiliateAmountFinal = existingAffiliate ? Number(existingAffiliate.amount) : affiliateAmount;
+  const courierAmountFinal = courierCommissionAmount;
+  const platformAmountNet = Math.max(0, Math.round((platformAmountGross - affiliateAmountFinal - courierAmountFinal) * 100) / 100);
+
+  if (existingPlatform) {
+    await prisma.commission.update({
+      where: { id: existingPlatform.id },
+      data: { amount: platformAmountNet, status },
+    });
+  } else {
+    await prisma.commission.create({
+      data: {
+        orderId,
+        type: 'PLATFORM',
+        amount: platformAmountNet,
+        percent: platformPercent,
         status,
       },
     });
@@ -156,13 +183,7 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
   const existingSupplierPayout = await prisma.supplierPayout.findFirst({
     where: { orderId, companyProfileId: order.companyProfileId },
   });
-  const platformAmountFinal = existingPlatform ? Number(existingPlatform.amount) : platformAmount;
-  const affiliateAmountFinal = existingAffiliate ? Number(existingAffiliate.amount) : affiliateAmount;
-  const courierAmountFinal =
-    delivery?.courierId && delivery.commissionAmount != null && Number(delivery.commissionAmount) > 0
-      ? Number(delivery.commissionAmount)
-      : 0;
-  const supplierAmount = Math.round((orderTotal - platformAmountFinal - affiliateAmountFinal - courierAmountFinal) * 100) / 100;
+  const supplierAmount = Math.round((orderTotal - platformAmountNet - affiliateAmountFinal - courierAmountFinal) * 100) / 100;
 
   if (supplierAmount > 0 && !existingSupplierPayout) {
     const supplierStatus = supplierHeld ? 'ON_HOLD' : 'APPROVED';

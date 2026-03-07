@@ -7,6 +7,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { LocaleProvider } from '@/context/LocaleContext';
 import { MaintenanceGate } from '@/components/MaintenanceGate';
+import { AffiliateRefTracker } from '@/components/AffiliateRefTracker';
 import { AdminMaintenanceBanner } from '@/components/AdminMaintenanceBanner';
 import { ToastContainerWrapper } from '@/components/ToastContainerWrapper';
 
@@ -29,6 +30,7 @@ export default function RootLayout({
               <CartProvider>
               <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="loading loading-spinner loading-lg" /></div>}>
               <MaintenanceGate>
+                <AffiliateRefTracker />
                 <AdminMaintenanceBanner />
                 {children}
                 <ToastContainerWrapper />
