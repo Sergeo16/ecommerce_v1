@@ -41,7 +41,9 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
 
   if (!order || order.items.length === 0) return;
 
-  const orderTotal = Number(order.subtotal);
+  const subtotal = Number(order.subtotal);
+  const shippingAmount = Number(order.shippingAmount ?? 0);
+  const orderTotal = subtotal + shippingAmount;
   if (orderTotal <= 0) return;
 
   const status = held ? 'ON_HOLD' : 'APPROVED';
@@ -135,8 +137,8 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
     : 0;
   if (delivery?.courierId && courierCommissionAmount <= 0) {
     courierCommissionAmount = await computeCourierCommissionAmount({
-      subtotal: orderTotal,
-      shippingAmount: Number(order.shippingAmount ?? 0),
+      subtotal,
+      shippingAmount,
       courierId: delivery.courierId,
     });
     if (courierCommissionAmount > 0) {
