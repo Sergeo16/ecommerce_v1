@@ -4,6 +4,7 @@ import { getPaymentRules } from '@/lib/rules-engine';
 import { addOrderJob, addCommissionJob, addDeliveryJob } from '@/lib/queue';
 import { initiateMobileMoneyPayment, checkMobileMoneyStatus } from '@/lib/mobile-money';
 import { isKkiapayConfigured } from '@/lib/kkiapay';
+import { isFedaPayConfigured } from '@/lib/fedapay';
 import { CANONICAL_CURRENCY, isPaymentAcceptedCurrency, convertToXOF, normalizeCurrencyCode } from '@/lib/currency';
 import { sanitizeShippingAddress, validateShippingAddress, sanitizeEmail } from '@/lib/validate-fields';
 import { getShippingAmountXOF, shippingInCurrency } from '@/lib/shipping';
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
   const shippingAddress = body.shippingAddress && typeof body.shippingAddress === 'object' ? body.shippingAddress : null;
   const paymentGateway = typeof body.paymentGateway === 'string' ? body.paymentGateway : null;
   const useKkiapay = paymentGateway === 'KKIAPAY' && isKkiapayConfigured();
+  const useFedaPay = paymentGateway === 'FEDAPAY' && isFedaPayConfigured();
 
   const isGuest = !userId;
   const guestEmail = typeof body.guestEmail === 'string' ? body.guestEmail.trim() : '';
@@ -185,14 +187,17 @@ export async function POST(request: NextRequest) {
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // KKiaPay : créer la commande en PENDING et renvoyer les infos pour ouvrir le widget (paiement après)
-  if (useKkiapay) {
+  if (useKkiapay || useFedaPay) {
     const amountToPay = paymentMode === 'FULL_UPFRONT' ? total : advance;
+    const gatewayLabel = useKkiapay ? 'KKiaPay' : 'FedaPay';
+
     if (normalizeCurrencyCode(currency) !== CANONICAL_CURRENCY) {
       return NextResponse.json(
-        { error: 'Le paiement KKiaPay est en XOF. Passez par la conversion proposée sur la page de commande.' },
+        { error: `Le paiement ${gatewayLabel} est en XOF. Passez par la conversion proposée sur la page de commande.` },
         { status: 400 }
       );
     }
+
     const phoneFromShipping = shipping.phone ?? '';
     if (!phoneFromShipping) {
       return NextResponse.json({ error: 'Téléphone requis pour le paiement Mobile Money' }, { status: 400 });
@@ -244,12 +249,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const publicKey = process.env.KKIAPAY_PUBLIC_KEY ?? '';
-    const sandbox = process.env.KKIAPAY_SANDBOX === 'true';
+    if (useKkiapay) {
+      const publicKey = process.env.KKIAPAY_PUBLIC_KEY ?? '';
+      const sandbox = process.env.KKIAPAY_SANDBOX === 'true';
+      return NextResponse.json({
+        order: { id: order.id, orderNumber: order.orderNumber },
+        amountToPay: Math.round(amountToPay),
+        kkiapay: { publicKey, sandbox },
+      });
+    }
+
+    const fedapayPublicKey = process.env.FEDAPAY_PUBLIC_KEY ?? '';
+    const fedapayEnvironment: 'sandbox' | 'live' = process.env.FEDAPAY_ENV === 'live' ? 'live' : 'sandbox';
     return NextResponse.json({
       order: { id: order.id, orderNumber: order.orderNumber },
       amountToPay: Math.round(amountToPay),
-      kkiapay: { publicKey, sandbox },
+      fedapay: { publicKey: fedapayPublicKey, environment: fedapayEnvironment },
     });
   }
 

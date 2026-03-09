@@ -54,8 +54,15 @@ function CheckoutContent() {
   const [rulesOverride, setRulesOverride] = useState<PaymentRules | null>(null);
   /** Utilisateur accepte de payer en devise acceptée (XOF) après conversion quand la devise du produit ne l'est pas. */
   const [conversionAccepted, setConversionAccepted] = useState(false);
-  /** Config paiement (KKiaPay activé ou non). */
-  const [paymentConfig, setPaymentConfig] = useState<{ kkiapayEnabled: boolean } | null>(null);
+  /** Config paiement (KKiaPay / FedaPay activés ou non). */
+  const [paymentConfig, setPaymentConfig] = useState<{
+    kkiapayEnabled: boolean;
+    fedapayEnabled: boolean;
+    fedapayPublicKey?: string;
+    fedapayEnvironment?: 'sandbox' | 'live';
+  } | null>(null);
+  /** Choix du prestataire de paiement (si plusieurs disponibles). */
+  const [paymentGateway, setPaymentGateway] = useState<'KKIAPAY' | 'FEDAPAY' | null>(null);
 
   const firstProductId = productId ?? cartItems[0]?.productId;
   const companyId = fromCart ? cartItems[0]?.companyProfileId : product?.companyProfileId;
@@ -87,8 +94,21 @@ function CheckoutContent() {
   useEffect(() => {
     fetch('/api/config/payment')
       .then((r) => (r.ok ? r.json() : null))
-      .then((c) => c && setPaymentConfig({ kkiapayEnabled: !!c.kkiapayEnabled }));
-  }, []);
+      .then((c) => {
+        if (!c) return;
+        const cfg = {
+          kkiapayEnabled: !!c.kkiapayEnabled,
+          fedapayEnabled: !!c.fedapayEnabled,
+          fedapayPublicKey: c.fedapayPublicKey as string | undefined,
+          fedapayEnvironment: c.fedapayEnvironment as 'sandbox' | 'live' | undefined,
+        };
+        setPaymentConfig(cfg);
+        if (!paymentGateway) {
+          if (cfg.fedapayEnabled) setPaymentGateway('FEDAPAY');
+          else if (cfg.kkiapayEnabled) setPaymentGateway('KKIAPAY');
+        }
+      });
+  }, [paymentGateway]);
 
   useEffect(() => {
     if (orderNumber) clearCart();
@@ -275,8 +295,12 @@ function CheckoutContent() {
         body.guestLastName = lastName.trim().slice(0, 100) || null;
       }
       const currencyForPayment = needsConversion ? CANONICAL_CURRENCY : curr;
-      if (requiresPayment && paymentConfig?.kkiapayEnabled && currencyForPayment === 'XOF') {
-        body.paymentGateway = 'KKIAPAY';
+      if (requiresPayment && currencyForPayment === 'XOF' && paymentGateway && paymentConfig) {
+        if (paymentGateway === 'KKIAPAY' && paymentConfig.kkiapayEnabled) {
+          body.paymentGateway = 'KKIAPAY';
+        } else if (paymentGateway === 'FEDAPAY' && paymentConfig.fedapayEnabled) {
+          body.paymentGateway = 'FEDAPAY';
+        }
       }
       const affiliateRef = getAffiliateRef();
       if (affiliateRef) body.referralCode = affiliateRef;
@@ -287,6 +311,7 @@ function CheckoutContent() {
         order?: { orderNumber?: string; id?: string };
         amountToPay?: number;
         kkiapay?: { publicKey: string; sandbox: boolean };
+        fedapay?: { publicKey: string; environment: 'sandbox' | 'live' };
       } = {};
       try {
         if (text) data = JSON.parse(text);
@@ -295,7 +320,7 @@ function CheckoutContent() {
       }
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
 
-      if (data.kkiapay?.publicKey && data.order?.orderNumber && typeof data.amountToPay === 'number') {
+      if (data.kkiapay?.publicKey && data.order?.orderNumber && typeof data.amountToPay === 'number' && paymentGateway === 'KKIAPAY') {
         const win = typeof window !== 'undefined' ? window : undefined;
         if (!win) throw new Error('Environnement navigateur requis');
         const scriptId = 'kkiapay-sdk';
@@ -362,6 +387,79 @@ function CheckoutContent() {
             paymentmethod: 'momo',
             theme: 'green',
           });
+        });
+      } else if (data.fedapay?.publicKey && data.order?.orderNumber && typeof data.amountToPay === 'number' && paymentGateway === 'FEDAPAY') {
+        const win = typeof window !== 'undefined' ? (window as unknown as any) : undefined;
+        if (!win) throw new Error('Environnement navigateur requis');
+        const scriptId = 'fedapay-checkout';
+        if (!document.getElementById(scriptId)) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://cdn.fedapay.com/checkout.js?v=1.1.7';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Chargement FedaPay impossible'));
+            document.body.appendChild(script);
+          });
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          try {
+            const widget = win.FedaPay.init({
+              public_key: data.fedapay!.publicKey,
+              environment: data.fedapay!.environment ?? 'sandbox',
+              transaction: {
+                amount: Math.round(data.amountToPay),
+                description: `Commande ${data.order!.orderNumber}`,
+                custom_metadata: {
+                  orderNumber: data.order!.orderNumber,
+                },
+              },
+              customer: {
+                email: email || undefined,
+                firstname: firstName || undefined,
+                lastname: lastName || undefined,
+                phone_number: phone
+                  ? {
+                      number: phone,
+                      country: 'BJ',
+                    }
+                  : undefined,
+              },
+              onComplete: async ({ reason, transaction }: { reason: number; transaction?: { id?: number } }) => {
+                if (reason !== win.FedaPay.CHECKOUT_COMPLETED || !transaction?.id) {
+                  toast.error(t('paymentFailed') ?? 'Paiement échoué');
+                  setSubmitting(false);
+                  reject(new Error('Paiement FedaPay non complété'));
+                  return;
+                }
+                try {
+                  const verifyRes = await fetch('/api/orders/verify-fedapay', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify({ orderNumber: data.order!.orderNumber, transactionId: transaction.id }),
+                  });
+                  const verifyData = await verifyRes.json().catch(() => ({}));
+                  if (!verifyRes.ok) throw new Error(verifyData.error ?? 'Vérification échouée');
+                  setOrderNumber(data.order!.orderNumber ?? null);
+                  clearCart();
+                  clearAffiliateRef();
+                  toast.success(t('orderSuccess'));
+                  resolve();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Vérification échouée');
+                  reject(e);
+                } finally {
+                  setSubmitting(false);
+                }
+              },
+            });
+            widget.open();
+          } catch (err) {
+            setSubmitting(false);
+            reject(err);
+          }
         });
       } else {
         setOrderNumber(data.order?.orderNumber ?? null);
@@ -668,6 +766,35 @@ function CheckoutContent() {
                 </>
               )}
             </div>
+            {paymentConfig?.kkiapayEnabled || paymentConfig?.fedapayEnabled ? (
+              <div className="mt-4">
+                <h2 className="font-semibold text-lg">{t('paymentProvider')}</h2>
+                <div className="space-y-1 text-sm mt-1">
+                  {paymentConfig.kkiapayEnabled && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        className="radio radio-primary radio-sm"
+                        checked={paymentGateway === 'KKIAPAY'}
+                        onChange={() => setPaymentGateway('KKIAPAY')}
+                      />
+                      <span>KKiaPay (Mobile Money, cartes)</span>
+                    </label>
+                  )}
+                  {paymentConfig.fedapayEnabled && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        className="radio radio-primary radio-sm"
+                        checked={paymentGateway === 'FEDAPAY'}
+                        onChange={() => setPaymentGateway('FEDAPAY')}
+                      />
+                      <span>FedaPay (Mobile Money, cartes)</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <h2 className="font-semibold text-lg mt-4">{t('shippingAddress')}</h2>
             <div className="flex flex-wrap gap-2 items-start">
               <input
