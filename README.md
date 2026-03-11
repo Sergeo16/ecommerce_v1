@@ -24,6 +24,229 @@ npm run dev
 - App : http://localhost:3000
 - Compte Super Admin (seed) : `superadmin@marketplace.bj` / `Admin123!`
 
+## Déploiement sur Render (avec ressources existantes)
+
+Cette section explique **comment héberger cette plateforme sur Render** en réutilisant :
+
+- la base PostgreSQL existante `prospects-db` (instance Render Postgres) ;
+- l’instance Key Value (Redis-compatible) `prospects-redis` ;
+- en créant **uniquement un nouveau Web Service Starter** pour cette app e‑commerce.
+
+L’objectif est d’éviter tout chevauchement de données ou de processus avec vos autres projets, tout en gardant les coûts au minimum.
+
+Les références Render utilisées :
+
+- [Render Key Value (Redis-compatible)](https://render.com/docs/key-value)
+- [Render Postgres – création et connexion](https://render.com/docs/postgresql-creating-connecting)
+
+---
+
+### 1. Vue d’ensemble de l’architecture sur Render
+
+Dans votre workspace Render « My Workspace », vous disposez déjà de :
+
+- **PostgreSQL** : `prospects-db` (plan Basic‑1gb)  
+  - Host interne : `dpg-d5ap9rpr0fns738fvr5g-a`
+  - Port : `5432`
+  - Database actuelle : `prospects_v2`
+  - Username : `prospects_user`
+  - Stockage : 10 Go (suffisant pour démarrer cette plateforme)
+
+- **Key Value (Redis-compatible)** : `prospects-redis` (plan Starter)  
+  - Runtime : Valkey 8.1.4 (compatible Redis)
+  - Internal URL : `redis://red-d5ap9rhr0fns738fvr40:6379`
+
+- **Web Service** : `prospects-app` (autre application déjà en production)
+
+Pour éviter tout conflit :
+
+- la plateforme e‑commerce utilisera **une nouvelle base logique** dans la même instance Postgres (`prospects-db`) ;
+- et un **autre “logical DB” Redis** (index `/1`) dans `prospects-redis` (l’autre app peut continuer à utiliser `/0`).
+
+Vous n’aurez donc **aucune duplication d’infrastructure**, uniquement un nouveau Web Service Starter.
+
+---
+
+### 2. Préparer la base de données dans `prospects-db`
+
+1. Dans Render, ouvrez `prospects-db` → onglet **Info**.
+2. Cliquez sur **Connect → PSQL Command** et copiez la commande proposée (elle ressemble à quelque chose comme) :
+
+   ```bash
+   psql postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/prospects_v2
+   ```
+
+3. Exécutez cette commande en local dans votre terminal (ou depuis un shell Render).
+4. Dans la session `psql`, créez une base dédiée à la marketplace (par ex. `ecommerce_marketplace`) :
+
+   ```sql
+   CREATE DATABASE ecommerce_marketplace;
+   ```
+
+   Vous pouvez choisir un autre nom, mais **gardez‑le cohérent** avec ce que vous mettrez ensuite dans `DATABASE_URL`.
+
+5. Quittez `psql` :
+
+   ```sql
+   \q
+   ```
+
+Résultat : la même instance Render Postgres `prospects-db` contient maintenant **deux bases** :
+
+- `prospects_v2` (pour l’app existante) ;
+- `ecommerce_marketplace` (pour cette plateforme e‑commerce).
+
+Aucune table n’est partagée, donc **zéro chevauchement de données**.
+
+---
+
+### 3. Préparer l’URL Postgres pour la plateforme e‑commerce
+
+1. Toujours dans `prospects-db` → onglet **Info**, cliquez sur **Connect → Internal Database URL**.
+2. Copiez l’URL interne fournie (masquée dans l’interface, mais de la forme) :
+
+   ```text
+   postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/prospects_v2
+   ```
+
+3. Pour la plateforme e‑commerce, vous allez **simplement remplacer le nom de la base** par `ecommerce_marketplace` :
+
+   ```text
+   postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/ecommerce_marketplace
+   ```
+
+4. Cette URL deviendra la valeur de `DATABASE_URL` dans les variables d’environnement du futur Web Service e‑commerce.
+
+> Render recommande d’utiliser l’URL interne pour les services du même région, ce qui réduit la latence et reste privé ([docs Postgres Render](https://render.com/docs/postgresql-creating-connecting)).
+
+---
+
+### 4. Préparer l’URL Redis (Key Value `prospects-redis`)
+
+1. Ouvrez `prospects-redis` → onglet **Info**.
+2. Repérez **Internal Key Value URL** :
+
+   ```text
+   redis://red-d5ap9rhr0fns738fvr40:6379
+   ```
+
+3. Pour la plateforme e‑commerce, utilisez **un logical DB séparé** (index `/1`) afin d’isoler les clés de celles d’autres apps :
+
+   ```text
+   redis://red-d5ap9rhr0fns738fvr40:6379/1
+   ```
+
+4. Cette URL deviendra la valeur de `REDIS_URL` pour le Web Service e‑commerce.
+
+> Valkey 8 est compatible Redis ; l’URL `redis://...` est supportée par la plupart des clients ([docs Render Key Value](https://render.com/docs/key-value)). L’usage de `/1` permet de séparer logiquement les clés (DB 1) de celles éventuellement utilisées par d’autres projets (DB 0, par défaut).
+
+---
+
+### 5. Créer le nouveau Web Service Starter pour la marketplace
+
+1. Dans Render, cliquez sur **New → Web Service**.
+2. Source : **Connecter le dépôt GitHub** correspondant à ce projet (`ecommerce_v1`).  
+   - Branche : `main` (ou celle que vous utilisez en production).
+3. Plan : **Starter** (Node).
+4. Région : **Oregon (US West)** pour être aligné avec `prospects-db` et `prospects-redis`.
+5. Runtime :
+   - Choisissez **Node 20** (ou version LTS récente).
+6. **Build Command** (recommandé) :
+
+   ```bash
+   npm install && npx prisma migrate deploy && npm run build
+   ```
+
+   - `npm install` : installe les dépendances.
+   - `npx prisma migrate deploy` : applique les migrations Prisma sur la base `ecommerce_marketplace` via `DATABASE_URL` (sans rejouer les migrations déjà appliquées).
+   - `npm run build` : build Next.js en mode production.
+
+7. **Start Command** :
+
+   ```bash
+   npm run start
+   ```
+
+   (le script `start` du projet démarre Next.js en mode production).
+
+8. Cochez éventuellement **Auto-Deploy** sur la branche principale si vous souhaitez des déploiements automatiques à chaque push.
+
+> Les scripts de worker BullMQ (`npm run worker`) pourront rester désactivés au début pour ne pas créer de service supplémentaire. Les jobs asynchrones (emails, notifications, etc.) pourront être externalisés plus tard dans un Worker Render dédié si besoin.
+
+---
+
+### 6. Variables d’environnement à configurer sur Render
+
+Dans l’onglet **Environment** du nouveau Web Service e‑commerce, configurez au minimum :
+
+- **Connexion base de données**
+  - `DATABASE_URL` : URL interne modifiée vers `ecommerce_marketplace`, par ex. :
+
+    ```text
+    postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/ecommerce_marketplace
+    ```
+
+- **Redis / BullMQ**
+  - `REDIS_URL` :
+
+    ```text
+    redis://red-d5ap9rhr0fns738fvr40:6379/1
+    ```
+
+- **Secrets applicatifs**
+  - `JWT_SECRET`
+  - `REFRESH_SECRET`
+  - `NEXT_PUBLIC_APP_URL` (par ex. `https://votre-domaine.onrender.com`)
+  - `MOBILE_MONEY_MOCK` (`false` en prod si KKiaPay / FedaPay sont configurés)
+  - Variables **KKiaPay** : `KKIAPAY_PUBLIC_KEY`, `KKIAPAY_PRIVATE_KEY`, `KKIAPAY_SECRET_KEY`, `KKIAPAY_SANDBOX`
+  - Variables **FedaPay** : `FEDAPAY_PUBLIC_KEY`, `FEDAPAY_SECRET_API_KEY`, `FEDAPAY_ENV`
+  - Éventuellement S3 / Stripe / Sentry si utilisés en production.
+
+> Vous pouvez partir de votre `.env` local comme base, puis **coller les valeurs dans Render** en veillant à remplacer l’URL de base de données et `REDIS_URL` par celles indiquées ci‑dessus.
+
+---
+
+### 7. Première mise en production : migrations & seed
+
+1. Assurez‑vous que toutes les migrations Prisma sont commitées dans le dépôt (dossier `prisma/migrations`).
+2. Sur Render, déclenchez un **Manual Deploy** du nouveau Web Service.
+3. Pendant le build, la commande :
+
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+   va appliquer toutes les migrations sur la base `ecommerce_marketplace` **sans toucher** aux autres bases de votre instance (`prospects_v2` reste intacte).
+
+4. Pour les données de base (catégories, admin, etc.), vous avez deux options :
+   - soit lancer un script `npm run seed` **manuellement** depuis un Shell Render en s’assurant que `DATABASE_URL` pointe bien vers `ecommerce_marketplace` ;
+   - soit prévoir un job ponctuel (script Node) exécuté une seule fois.
+
+> Évitez de lancer `npm run seed` automatiquement à chaque déploiement pour ne pas dupliquer les données en production.
+
+---
+
+### 8. Vérifications post‑déploiement
+
+Une fois le premier déploiement live :
+
+1. Ouvrez l’URL Render du Web Service (par ex. `https://votre-marketplace.onrender.com`).
+2. Testez :
+   - la page d’accueil et le catalogue (`/catalog`) ;
+   - la création de compte et la connexion ;
+   - au moins un parcours de commande (avec Mobile Money mock ou KKiaPay / FedaPay si configurés).
+3. Dans Render :
+   - consultez les **Logs** du Web Service ;
+   - vérifiez que les erreurs éventuelles ne font pas référence à `prospects_v2` ni à des clés Redis utilisées par d’autres apps.
+
+Si tout est OK, vous avez maintenant :
+
+- une **plateforme e‑commerce isolée au niveau données** (nouvelle base dans `prospects-db`) ;
+- un partage non intrusif de l’instance Key Value (Redis) en utilisant un logical DB dédié (`/1`) ;
+- et **un seul Web Service Starter supplémentaire** à payer pour faire tourner l’application.
+
+---
+
 ## Rôles
 
 - **Super Admin** : règles globales, commissions, maintenance, users, dashboard financier
