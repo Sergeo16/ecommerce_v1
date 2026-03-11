@@ -9,20 +9,24 @@ const prisma = new PrismaClient();
 async function main() {
   const hash = await argon2.hash('Admin123!', { type: argon2.argon2id });
 
-  // 1 Super Admin
-  const superAdmin = await prisma.user.upsert({
-    where: { email: 'superadmin@marketplace.bj' },
-    update: {},
-    create: {
-      email: 'superadmin@marketplace.bj',
-      passwordHash: hash,
-      role: Role.SUPER_ADMIN,
-      firstName: 'Super',
-      lastName: 'Admin',
-      phone: '+22997000000',
-    },
-  });
-  console.log('Super Admin créé:', superAdmin.email);
+  // 1 Super Admin (uniquement en dev : ne jamais créer l’admin de démo en production)
+  if (process.env.NODE_ENV !== 'production') {
+    const superAdmin = await prisma.user.upsert({
+      where: { email: 'superadmin@marketplace.bj' },
+      update: {},
+      create: {
+        email: 'superadmin@marketplace.bj',
+        passwordHash: hash,
+        role: Role.SUPER_ADMIN,
+        firstName: 'Super',
+        lastName: 'Admin',
+        phone: '+22997000000',
+      },
+    });
+    console.log('Super Admin (dev) créé:', superAdmin.email);
+  } else {
+    console.log('Super Admin (dev) ignoré en production — utilisez le bootstrap ou créez l’admin manuellement.');
+  }
 
   // 3 Fournisseurs + CompanyProfile
   const suppliers = await Promise.all([

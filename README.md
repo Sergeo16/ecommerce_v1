@@ -22,7 +22,7 @@ npm run dev
 ```
 
 - App : http://localhost:3000
-- Compte Super Admin (seed) : `superadmin@marketplace.bj` / `Admin123!`
+- **En local uniquement** : le seed crée un compte Super Admin de démo : `superadmin@marketplace.bj` / `Admin123!`. Ce compte **n’est jamais créé en production** (voir section Déploiement pour définir l’admin en prod).
 
 ## Déploiement sur Render (avec ressources existantes)
 
@@ -55,15 +55,18 @@ Dans votre workspace Render « My Workspace », vous disposez déjà de :
 - **Key Value (Redis-compatible)** : `prospects-redis` (plan Starter)  
   - Runtime : Valkey 8.1.4 (compatible Redis)
   - Internal URL : `redis://red-d5ap9rhr0fns738fvr40:6379`
+  - **Partagé par 3 applications** : `prospects-app`, `doc-proof`, et cette plateforme e‑commerce.
 
-- **Web Service** : `prospects-app` (autre application déjà en production)
+- **Web Services existants** : `prospects-app`, `doc-proof` (chacun avec son propre dépôt et déploiement).
 
 Pour éviter tout conflit :
 
 - la plateforme e‑commerce utilisera **une nouvelle base logique** dans la même instance Postgres (`prospects-db`) ;
-- et un **autre “logical DB” Redis** (index `/1`) dans `prospects-redis` (l’autre app peut continuer à utiliser `/0`).
+- et un **logical DB Redis dédié** dans `prospects-redis`. Répartition actuelle pour un bon fonctionnement de toutes les apps :
+  - **DB 0** : `prospects-app` (URL sans suffixe) et `doc-proof` (même DB 0, isolation par **préfixe de clés** : `REDIS_KEY_PREFIX=docproof:`)
+  - **DB 2** : cette plateforme e‑commerce (URL avec `/2`), pour une isolation complète sans préfixe à gérer
 
-Vous n’aurez donc **aucune duplication d’infrastructure**, uniquement un nouveau Web Service Starter.
+Vous n’aurez donc **aucune duplication d’infrastructure**, uniquement un nouveau Web Service Starter. Aucun changement n’est requis côté `doc-proof` ni `prospects-app`.
 
 ---
 
@@ -123,22 +126,33 @@ Aucune table n’est partagée, donc **zéro chevauchement de données**.
 
 ### 4. Préparer l’URL Redis (Key Value `prospects-redis`)
 
+L’instance `prospects-redis` est utilisée par **trois applications**. Pour que toutes fonctionnent sans conflit :
+
+| Application       | Logical DB | Isolation | Variables d’environnement |
+|-------------------|------------|-----------|---------------------------|
+| prospects-app     | 0 (défaut) | —         | `REDIS_URL=redis://red-d5ap9rhr0fns738fvr40:6379` |
+| doc-proof         | 0          | Préfixe de clés | `REDIS_URL=redis://red-d5ap9rhr0fns738fvr40:6379` et `REDIS_KEY_PREFIX=docproof:` |
+| e‑commerce (cette plateforme) | **2** | Logical DB dédié | `REDIS_URL=redis://red-d5ap9rhr0fns738fvr40:6379/2` (aucun préfixe requis) |
+
+**Pour cette plateforme e‑commerce :**
+
 1. Ouvrez `prospects-redis` → onglet **Info**.
-2. Repérez **Internal Key Value URL** :
+2. Repérez **Internal Key Value URL** (sans numéro de base) :
 
    ```text
    redis://red-d5ap9rhr0fns738fvr40:6379
    ```
 
-3. Pour la plateforme e‑commerce, utilisez **un logical DB séparé** (index `/1`) afin d’isoler les clés de celles d’autres apps :
+3. Pour cette plateforme, utilisez le **logical DB 2** en ajoutant `/2` à la fin :
 
    ```text
-   redis://red-d5ap9rhr0fns738fvr40:6379/1
+   redis://red-d5ap9rhr0fns738fvr40:6379/2
    ```
 
-4. Cette URL deviendra la valeur de `REDIS_URL` pour le Web Service e‑commerce.
+4. Cette URL deviendra la valeur de **`REDIS_URL`** pour le Web Service e‑commerce. Vous n’avez **pas besoin** de `REDIS_KEY_PREFIX` : l’isolation est assurée par le logical DB 2.
 
-> Valkey 8 est compatible Redis ; l’URL `redis://...` est supportée par la plupart des clients ([docs Render Key Value](https://render.com/docs/key-value)). L’usage de `/1` permet de séparer logiquement les clés (DB 1) de celles éventuellement utilisées par d’autres projets (DB 0, par défaut).
+> **Côté doc-proof** : la config actuelle (`REDIS_URL` sans `/1`, `REDIS_KEY_PREFIX=docproof:`) reste correcte ; elle partage la DB 0 avec prospects-app mais les clés sont préfixées, donc pas de chevauchement. Aucun changement à faire.  
+> Valkey 8 est compatible Redis ; l’URL `redis://...` est supportée par la plupart des clients ([docs Render Key Value](https://render.com/docs/key-value)).
 
 ---
 
@@ -151,13 +165,14 @@ Aucune table n’est partagée, donc **zéro chevauchement de données**.
 4. Région : **Oregon (US West)** pour être aligné avec `prospects-db` et `prospects-redis`.
 5. Runtime :
    - Choisissez **Node 20** (ou version LTS récente).
-6. **Build Command** (recommandé) :
+6. **Build Command** (recommandé, automatisé via script) :
 
    ```bash
-   npm install && npx prisma migrate deploy && npm run build
+   npm run render:build
    ```
 
-   - `npm install` : installe les dépendances.
+   Ce script fait automatiquement :
+
    - `npx prisma migrate deploy` : applique les migrations Prisma sur la base `ecommerce_marketplace` via `DATABASE_URL` (sans rejouer les migrations déjà appliquées).
    - `npm run build` : build Next.js en mode production.
 
@@ -187,11 +202,17 @@ Dans l’onglet **Environment** du nouveau Web Service e‑commerce, configurez 
     ```
 
 - **Redis / BullMQ**
-  - `REDIS_URL` :
+  - `REDIS_URL` (logical DB **2** pour cette plateforme, afin de ne pas chevaucher prospects-app ni doc-proof) :
 
     ```text
-    redis://red-d5ap9rhr0fns738fvr40:6379/1
+    redis://red-d5ap9rhr0fns738fvr40:6379/2
     ```
+
+- **Premier Super Admin (production)**  
+  Définissez vous‑même les identifiants du premier admin ; aucun compte de démo n’est créé en prod. Ajoutez (en **Secret** sur Render) :
+  - `SUPER_ADMIN_EMAIL` : l’email du compte Super Admin (ex. `vous@votredomaine.com`)
+  - `SUPER_ADMIN_PASSWORD` : mot de passe (min. 8 caractères)  
+  Après le premier déploiement, exécutez **une seule fois** (Shell Render ou one-off job) : `npm run bootstrap:admin`. Ce script crée le compte Super Admin uniquement s’il n’existe aucun SUPER_ADMIN en base.
 
 - **Secrets applicatifs**
   - `JWT_SECRET`
@@ -206,23 +227,19 @@ Dans l’onglet **Environment** du nouveau Web Service e‑commerce, configurez 
 
 ---
 
-### 7. Première mise en production : migrations & seed
+### 7. Première mise en production : migrations et premier admin
 
 1. Assurez‑vous que toutes les migrations Prisma sont commitées dans le dépôt (dossier `prisma/migrations`).
-2. Sur Render, déclenchez un **Manual Deploy** du nouveau Web Service.
-3. Pendant le build, la commande :
+2. Dans l’onglet **Environment** du Web Service, définissez **SUPER_ADMIN_EMAIL** et **SUPER_ADMIN_PASSWORD** (secrets) avec les identifiants du premier Super Admin. Aucun admin de démo n’est créé en production.
+3. Sur Render, déclenchez un **Manual Deploy** du nouveau Web Service.
+4. Pendant le build, `npm run render:build` applique les migrations sur `ecommerce_marketplace` ; la base `prospects_v2` n’est pas modifiée.
+5. Après le premier déploiement réussi, créez le compte Super Admin **une seule fois** : dans le Shell Render du service (ou un one-off job), exécutez :
 
    ```bash
-   npx prisma migrate deploy
+   npm run bootstrap:admin
    ```
 
-   va appliquer toutes les migrations sur la base `ecommerce_marketplace` **sans toucher** aux autres bases de votre instance (`prospects_v2` reste intacte).
-
-4. Pour les données de base (catégories, admin, etc.), vous avez deux options :
-   - soit lancer un script `npm run seed` **manuellement** depuis un Shell Render en s’assurant que `DATABASE_URL` pointe bien vers `ecommerce_marketplace` ;
-   - soit prévoir un job ponctuel (script Node) exécuté une seule fois.
-
-> Évitez de lancer `npm run seed` automatiquement à chaque déploiement pour ne pas dupliquer les données en production.
+   Le script crée un utilisateur SUPER_ADMIN avec l’email et le mot de passe définis en variables d’environnement, uniquement s’il n’existe pas encore de Super Admin en base.
 
 ---
 
