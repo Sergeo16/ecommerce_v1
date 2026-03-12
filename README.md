@@ -79,7 +79,18 @@ Vous n’aurez donc **aucune duplication d’infrastructure**, uniquement un nou
    psql postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/prospects_v2
    ```
 
-3. Exécutez cette commande en local dans votre terminal (ou depuis un shell Render).
+3. Exécutez cette commande :
+
+   - **Depuis votre machine locale** (psql installé en local) ; ou  
+   - **Depuis Docker**, par exemple si vous travaillez toujours dans un conteneur :
+
+     ```bash
+     docker run --rm -it \
+       postgres:16 \
+       psql "postgresql://prospects_user:VOTRE_MOT_DE_PASSE@dpg-d5ap9rpr0fns738fvr5g-a:5432/prospects_v2"
+     ```
+
+     Vous pouvez aussi lancer `psql` depuis un conteneur déjà démarré (par ex. via `docker exec -it <nom_du_conteneur> psql ...`).
 4. Dans la session `psql`, créez une base dédiée à la marketplace (par ex. `ecommerce_marketplace`) :
 
    ```sql
