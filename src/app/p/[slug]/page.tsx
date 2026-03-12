@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -99,7 +100,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [product?.imageUrls?.length]);
 
-  const images = product?.imageUrls ?? [];
+  const images = useMemo(() => product?.imageUrls ?? [], [product?.imageUrls]);
   const imageUrlsAbs = useMemo(() => images.map((u) => toAbsoluteMediaUrl(u)), [images]);
 
   if (slug === 'catalog') return <div className="p-8 text-center text-base-content">{t('loading')}</div>;
@@ -129,12 +130,14 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
           {/* Galerie : image principale avec défiler prev/next + miniatures */}
           <div className="space-y-3">
             <div className="relative">
-              <figure className="bg-base-300 rounded-lg border border-base-300 aspect-square max-h-[400px] flex items-center justify-center overflow-hidden">
+              <figure className="bg-base-300 rounded-lg border border-base-300 aspect-square max-h-[400px] flex items-center justify-center overflow-hidden relative">
                 {mainImageUrlAbs ? (
-                  <img
+                  <Image
                     src={mainImageUrlAbs}
                     alt={product.name}
-                    className="object-contain w-full h-full"
+                    fill
+                    className="object-contain"
+                    sizes="(max-width: 768px) 100vw, 50vw"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                       const fallback = (e.target as HTMLImageElement).nextElementSibling;
@@ -183,7 +186,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                     }`}
                     onClick={() => setSelectedImageIndex(i)}
                   >
-                    <img src={imageUrlsAbs[i] ?? url} alt="" className="object-cover w-full h-full" />
+                    <Image src={imageUrlsAbs[i] ?? url} alt="" width={64} height={64} className="object-cover w-full h-full" />
                   </button>
                 ))}
               </div>

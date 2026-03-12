@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -29,7 +29,7 @@ export default function AdminUsersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  function load() {
+  const load = useCallback(() => {
     if (!token || user?.role !== 'SUPER_ADMIN') return;
     setLoading(true);
     const params = new URLSearchParams();
@@ -42,11 +42,11 @@ export default function AdminUsersPage() {
         setTotal(data.total ?? 0);
       })
       .finally(() => setLoading(false));
-  }
+  }, [token, user?.role, filterRole, filterStatus]);
 
   useEffect(() => {
     load();
-  }, [token, user?.role, filterRole, filterStatus]);
+  }, [load]);
 
   async function setStatus(userId: string, status: 'ACTIVE' | 'SUSPENDED' | 'BLOCKED') {
     if (!token) return;

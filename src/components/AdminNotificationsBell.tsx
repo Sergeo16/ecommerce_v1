@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 
@@ -29,7 +29,7 @@ export function AdminNotificationsBell({ token }: { token: string }) {
     }
   }, [open]);
 
-  async function fetchNotifs(unreadOnly = false) {
+  const fetchNotifs = useCallback(async (unreadOnly = false) => {
     if (!token) return;
     setLoading(true);
     try {
@@ -44,13 +44,13 @@ export function AdminNotificationsBell({ token }: { token: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [token]);
 
   useEffect(() => {
     fetchNotifs(false);
     const iv = setInterval(() => fetchNotifs(false), 60000);
     return () => clearInterval(iv);
-  }, [token]);
+  }, [fetchNotifs]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

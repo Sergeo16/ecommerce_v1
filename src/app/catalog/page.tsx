@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { AppLogo } from '@/components/AppLogo';
@@ -110,7 +111,7 @@ export default function CatalogPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [q]);
+  }, [q, pathname, router, searchParams]);
 
   useEffect(() => {
     setLoading(true);
@@ -263,9 +264,9 @@ export default function CatalogPage() {
               return (
               <div key={p.id} className="card bg-base-100 border border-base-300 shadow hover:shadow-xl transition-shadow h-full flex flex-col min-w-0">
                 <Link href={`/p/${p.slug}?id=${p.id}`} className="block flex-1 min-h-0">
-                  <figure className="h-40 bg-base-300 shrink-0 border-b border-base-300">
+                  <figure className="h-40 bg-base-300 shrink-0 border-b border-base-300 relative">
                     {imgSrc ? (
-                      <img src={imgSrc} alt={p.name} className="object-cover w-full h-full" />
+                      <Image src={imgSrc} alt={p.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
                     ) : (
                       <span className="text-4xl opacity-50">📦</span>
                     )}

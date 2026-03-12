@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   if (type === 'image') {
     try {
       const normalized = await normalizeImageBuffer(rawBuffer, contentType);
-      buffer = normalized.buffer;
+      buffer = Buffer.from(normalized.buffer);
       finalContentType = normalized.contentType;
       const base = file.name.replace(/\.[^.]+$/i, '') || 'image';
       finalFilename = sanitizeFilename(base) + normalized.ext;

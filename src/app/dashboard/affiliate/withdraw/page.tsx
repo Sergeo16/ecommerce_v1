@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
@@ -28,7 +28,7 @@ export default function AffiliateWithdrawPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     if (!token || user?.role !== 'AFFILIATE') return;
     setLoading(true);
     fetch('/api/affiliate/withdraw', { headers: { Authorization: `Bearer ${token}` } })
@@ -40,11 +40,11 @@ export default function AffiliateWithdrawPage() {
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  };
+  }, [token, user?.role]);
 
   useEffect(() => {
     fetchData();
-  }, [token, user?.role]);
+  }, [fetchData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
