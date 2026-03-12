@@ -68,10 +68,10 @@ export async function approveCommissionsOnDelivery(orderId: string): Promise<voi
   if (order.affiliateLinkId && order.affiliateLink) {
     const defaultConfig = await getAffiliateDefaultCommission();
     const resolved = resolveAffiliateCommissionForOrder({
-      orderOverridePercent: order.affiliateOverridePercent,
-      orderOverrideAmount: order.affiliateOverrideAmount,
-      linkCommissionPercent: order.affiliateLink.commissionPercent,
-      linkCommissionAmount: order.affiliateLink.commissionAmount,
+      orderOverridePercent: order.affiliateOverridePercent != null ? Number(order.affiliateOverridePercent) : null,
+      orderOverrideAmount: order.affiliateOverrideAmount != null ? Number(order.affiliateOverrideAmount) : null,
+      linkCommissionPercent: order.affiliateLink.commissionPercent != null ? Number(order.affiliateLink.commissionPercent) : null,
+      linkCommissionAmount: order.affiliateLink.commissionAmount != null ? Number(order.affiliateLink.commissionAmount) : null,
       defaultConfig,
     });
 
