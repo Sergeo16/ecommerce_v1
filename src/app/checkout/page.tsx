@@ -346,7 +346,7 @@ function CheckoutContent() {
             cleanup();
             const txId = response?.transactionId ?? (response as unknown as Record<string, string>)?.transaction_id;
             if (!txId) {
-              setError('Réponse de paiement invalide');
+              toast.error('Réponse de paiement invalide');
               setSubmitting(false);
               reject(new Error('transactionId manquant'));
               return;
