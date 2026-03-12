@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { CommissionStatus, CommissionType, type Prisma } from '@prisma/client';
 
 /** GET : liste des commissions pour l'admin (filtres par type, statut) */
 export async function GET(request: NextRequest) {
@@ -11,9 +12,13 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status');
   const limit = Math.min(100, parseInt(searchParams.get('limit') ?? '50', 10));
 
-  const where: { type?: string; status?: string } = {};
-  if (type && ['PLATFORM', 'AFFILIATE', 'COURIER'].includes(type)) where.type = type;
-  if (status && ['PENDING', 'APPROVED', 'ON_HOLD', 'PAID', 'CANCELLED'].includes(status)) where.status = status;
+  const where: Prisma.CommissionWhereInput = {};
+  if (type && Object.values(CommissionType).includes(type as CommissionType)) {
+    where.type = type as CommissionType;
+  }
+  if (status && Object.values(CommissionStatus).includes(status as CommissionStatus)) {
+    where.status = status as CommissionStatus;
+  }
 
   const commissions = await prisma.commission.findMany({
     where,

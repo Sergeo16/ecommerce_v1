@@ -305,7 +305,6 @@ export default function RegisterPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value.slice(0, 20))}
               required={isSupplier || isCourier}
-              required={isSupplier}
               maxLength={20}
               autoComplete="tel"
             />
