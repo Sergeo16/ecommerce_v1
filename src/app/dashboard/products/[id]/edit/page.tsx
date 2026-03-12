@@ -12,9 +12,11 @@ import { useLocale } from '@/context/LocaleContext';
 
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
-const ALLOWED_NAME = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
+// Noms et catégories : lettres (accentuées ou non), chiffres, espaces et ponctuation courante.
+// On évite les regex Unicode `\p{L}` / `\p{N}` pour rester compatible avec une cible TS < ES6.
+const ALLOWED_NAME = /^[A-Za-z0-9À-ÖØ-öø-ÿ\s\-',.?!:;()]*$/;
 const ALLOWED_DESCRIPTION = /^[^<>\\]*$/u;
-const ALLOWED_CATEGORY = /^[\p{L}\p{N}\p{M}\s\-',.?!:;()]*$/u;
+const ALLOWED_CATEGORY = /^[A-Za-z0-9À-ÖØ-öø-ÿ\s\-',.?!:;()]*$/;
 
 function PaperclipIcon({ className }: { className?: string }) {
   return (
