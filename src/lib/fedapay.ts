@@ -7,8 +7,16 @@
  * - API Transactions: https://docs.fedapay.com/api-reference/transactions
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { FedaPay, Transaction } from 'fedapay';
+
+/** Réponse Transaction.retrieve (forme minimale pour notre usage) */
+interface FedaPayTx {
+  id?: number;
+  status?: string;
+  amount?: number;
+  currency?: { iso?: string };
+  currency_iso?: string;
+}
 
 export function isFedaPayConfigured(): boolean {
   return !!(process.env.FEDAPAY_PUBLIC_KEY && process.env.FEDAPAY_SECRET_API_KEY);
@@ -56,7 +64,7 @@ export async function verifyFedaPayTransaction(
 
   try {
     const idNumber = typeof transactionId === 'string' ? Number(transactionId) : transactionId;
-    const tx: any = await Transaction.retrieve(idNumber as number);
+    const tx = (await Transaction.retrieve(idNumber as number)) as FedaPayTx;
     const status = (tx?.status ?? '').toString().toLowerCase();
     const success = status === 'approved';
 
@@ -68,11 +76,9 @@ export async function verifyFedaPayTransaction(
       currencyIso: tx?.currency?.iso ?? tx?.currency_iso,
       message: success ? undefined : `Statut FedaPay: ${status || 'inconnu'}`,
     };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: err?.message ?? 'Échec vérification FedaPay',
-    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Échec vérification FedaPay';
+    return { success: false, message };
   }
 }
 

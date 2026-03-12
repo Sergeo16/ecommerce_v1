@@ -4,15 +4,24 @@
  * @see https://docs.kkiapay.me/v1/plugin-et-sdk/admin-sdks-server-side
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-let kkiapayInstance: any = null;
+interface KkiapayVerifyResponse {
+  status?: string;
+  transactionId?: string;
+  transaction?: { status?: string; id?: string; amount?: number };
+  amount?: number;
+  message?: string;
+}
+
+let kkiapayInstance: { verify: (id: string) => Promise<KkiapayVerifyResponse> } | null = null;
 
 function getKkiapay() {
   if (!process.env.KKIAPAY_PRIVATE_KEY || !process.env.KKIAPAY_PUBLIC_KEY || !process.env.KKIAPAY_SECRET_KEY) {
     return null;
   }
   if (!kkiapayInstance) {
-    const { kkiapay } = require('@kkiapay-org/nodejs-sdk');
+    const { kkiapay } = require('@kkiapay-org/nodejs-sdk') as {
+      kkiapay: (opts: { privatekey: string; publickey: string; secretkey: string; sandbox: boolean }) => { verify: (id: string) => Promise<KkiapayVerifyResponse> };
+    };
     kkiapayInstance = kkiapay({
       privatekey: process.env.KKIAPAY_PRIVATE_KEY,
       publickey: process.env.KKIAPAY_PUBLIC_KEY,
@@ -59,10 +68,8 @@ export async function verifyKkiapayTransaction(transactionId: string): Promise<K
       amount: response?.amount ?? response?.transaction?.amount,
       message: success ? undefined : (response?.message ?? `Statut: ${status}`),
     };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: err?.message ?? 'Échec vérification KKiaPay',
-    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Échec vérification KKiaPay';
+    return { success: false, message };
   }
 }
