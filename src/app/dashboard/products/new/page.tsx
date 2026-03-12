@@ -142,7 +142,7 @@ export default function NewProductPage() {
           : data.error === 'invalid_video_type' ? t('uploadErrorInvalidVideoType')
           : data.error === 'upload_failed' ? t('uploadFailed')
           : (data.error ?? t('uploadFailed'));
-        throw new Error(msg);
+        throw new Error(typeof msg === 'string' ? msg : String(msg ?? 'Upload failed'));
       }
       if (type === 'image') setImageUrl(index, (data.url as string) ?? '');
       else setVideoUrl(index, (data.url as string) ?? '');
