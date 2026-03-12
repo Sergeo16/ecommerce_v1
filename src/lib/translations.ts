@@ -656,7 +656,6 @@ export const translations = {
     addCurrency: 'Add currency',
     currencyCodePlaceholder: 'Code (e.g. EUR, USD)',
     categoryOther: 'Enter a category',
-    addImageUrl: 'Add image (URL)',
     orChooseFile: 'or choose a file',
     orChooseVideo: 'or choose a video',
     uploadInProgress: 'Uploading...',
