@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   });
   if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
-  const result = await createPaymentIntent(amount, order.currency, { orderId, userId: order.userId ?? undefined });
+  const result = await createPaymentIntent(amount, order.currency, { orderId, userId: order.userId ?? '' });
   if (!result) {
     return NextResponse.json({
       mock: true,
