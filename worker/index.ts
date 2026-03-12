@@ -54,7 +54,7 @@ async function processDeliveryJob(job: { name: string; data: Record<string, unkn
     create: {
       orderId,
       status: 'PENDING',
-      deliveryAddress: order.shippingAddress,
+      deliveryAddress: order.shippingAddress as unknown as import('@prisma/client').Prisma.InputJsonValue,
     },
   });
 
