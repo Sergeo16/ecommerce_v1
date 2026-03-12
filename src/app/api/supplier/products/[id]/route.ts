@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { normalizeProductMedia } from '@/lib/normalize-product-media';
+import type { Prisma } from '@prisma/client';
 
 const PUBLISHER_ROLES = ['SUPPLIER', 'SUPER_ADMIN', 'AFFILIATE'] as const;
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
 
+type ProductWithCompany = Prisma.ProductGetPayload<{
+  include: { companyProfile: { select: { userId: true } }; category: true };
+}>;
+
 /** Vérifie que l'utilisateur peut modifier/supprimer ce produit (créateur ou admin). */
-async function canEditProduct(productId: string, userId: string, role: string): Promise<{ ok: boolean; product?: Awaited<ReturnType<typeof prisma.product.findFirst>> }> {
+async function canEditProduct(productId: string, userId: string, role: string): Promise<{ ok: boolean; product?: ProductWithCompany }> {
   const product = await prisma.product.findFirst({
     where: { id: productId },
     include: { companyProfile: { select: { userId: true } }, category: true },
   });
   if (!product) return { ok: false };
   if (role === 'SUPER_ADMIN') return { ok: true, product };
-  if (product.companyProfile.userId === userId && PUBLISHER_ROLES.includes(role as any)) return { ok: true, product };
+  if (product.companyProfile.userId === userId && PUBLISHER_ROLES.includes(role as (typeof PUBLISHER_ROLES)[number])) return { ok: true, product };
   return { ok: false };
 }
 
@@ -24,11 +29,12 @@ export async function GET(
 ) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || !PUBLISHER_ROLES.includes(role as any)) {
+  if (!userId || !role || !PUBLISHER_ROLES.includes(role as (typeof PUBLISHER_ROLES)[number])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const uid: string = userId;
   const { id } = await params;
-  const { ok, product } = await canEditProduct(id, userId, role);
+  const { ok, product } = await canEditProduct(id, uid, role);
   if (!ok || !product) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const { companyProfile, ...rest } = product;
   return NextResponse.json({
@@ -45,11 +51,12 @@ export async function PATCH(
 ) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || !PUBLISHER_ROLES.includes(role as any)) {
+  if (!userId || !role || !PUBLISHER_ROLES.includes(role as (typeof PUBLISHER_ROLES)[number])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const uid: string = userId;
   const { id } = await params;
-  const { ok, product: existing } = await canEditProduct(id, userId, role);
+  const { ok, product: existing } = await canEditProduct(id, uid, role);
   if (!ok || !existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await request.json();
@@ -89,7 +96,7 @@ export async function PATCH(
   if (videoUrls.length > MAX_VIDEOS) videoUrls = videoUrls.slice(0, MAX_VIDEOS);
   if (mainImageIndex >= imageUrls.length) mainImageIndex = 0;
 
-  const normalized = await normalizeProductMedia(userId, imageUrls, videoUrls);
+  const normalized = await normalizeProductMedia(uid, imageUrls, videoUrls);
   imageUrls = normalized.imageUrls;
   videoUrls = normalized.videoUrls;
 
@@ -131,11 +138,12 @@ export async function DELETE(
 ) {
   const userId = request.headers.get('x-user-id');
   const role = request.headers.get('x-user-role');
-  if (!userId || !PUBLISHER_ROLES.includes(role as any)) {
+  if (!userId || !role || !PUBLISHER_ROLES.includes(role as (typeof PUBLISHER_ROLES)[number])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const uid: string = userId;
   const { id } = await params;
-  const { ok } = await canEditProduct(id, userId, role);
+  const { ok } = await canEditProduct(id, uid, role);
   if (!ok) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   await prisma.product.delete({ where: { id } });
   return NextResponse.json({ ok: true });
