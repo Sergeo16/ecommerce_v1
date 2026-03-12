@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { SupplierPayoutStatus, type Prisma } from '@prisma/client';
 
 /** GET : liste des paiements fournisseurs pour l'admin */
 export async function GET(request: NextRequest) {
@@ -10,8 +11,10 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status');
   const limit = Math.min(100, parseInt(searchParams.get('limit') ?? '50', 10));
 
-  const where: { status?: string } = {};
-  if (status && ['APPROVED', 'ON_HOLD', 'PAID', 'CANCELLED'].includes(status)) where.status = status;
+  const where: Prisma.SupplierPayoutWhereInput = {};
+  if (status && Object.values(SupplierPayoutStatus).includes(status as SupplierPayoutStatus)) {
+    where.status = status as SupplierPayoutStatus;
+  }
 
   const payouts = await prisma.supplierPayout.findMany({
     where,
