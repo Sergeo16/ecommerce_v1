@@ -148,7 +148,7 @@ export default function DashboardPage() {
             </div>
             <div className="stat bg-base-100 rounded-lg shadow">
               <div className="stat-title">{t('ranking')}</div>
-              <div className="stat-value">#{affiliateStats.ranking}</div>
+              <div className="stat-value">#{String((affiliateStats.ranking as number | string | undefined) ?? '')}</div>
             </div>
           </div>
         )}
