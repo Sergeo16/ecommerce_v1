@@ -42,22 +42,22 @@ export async function getPaymentRules(opts?: {
   if (!opts) return global;
   // Règles par produit
   if (opts.productId) {
-    const productRule = await getSettingJson<PaymentRules>(`payment_product_${opts.productId}`, null);
+    const productRule = await getSettingJson<PaymentRules | null>(`payment_product_${opts.productId}`, null);
     if (productRule) return { ...global, ...productRule };
   }
   // Règles par fournisseur
   if (opts.companyId) {
-    const companyRule = await getSettingJson<PaymentRules>(`payment_company_${opts.companyId}`, null);
+    const companyRule = await getSettingJson<PaymentRules | null>(`payment_company_${opts.companyId}`, null);
     if (companyRule) return { ...global, ...companyRule };
   }
   // Règles par pays
   if (opts.country) {
-    const countryRule = await getSettingJson<PaymentRules>(`payment_country_${opts.country}`, null);
+    const countryRule = await getSettingJson<PaymentRules | null>(`payment_country_${opts.country}`, null);
     if (countryRule) return { ...global, ...countryRule };
   }
   // Règles par user
   if (opts.userId) {
-    const userRule = await getSettingJson<PaymentRules>(`payment_user_${opts.userId}`, null);
+    const userRule = await getSettingJson<PaymentRules | null>(`payment_user_${opts.userId}`, null);
     if (userRule) return { ...global, ...userRule };
   }
   return global;
@@ -66,11 +66,11 @@ export async function getPaymentRules(opts?: {
 export async function getCommissionRules(opts?: { productId?: string; companyId?: string }): Promise<CommissionRules> {
   const global = await getSettingJson<CommissionRules>('commission_rules', defaults.commission);
   if (opts?.productId) {
-    const productRule = await getSettingJson<CommissionRules>(`commission_product_${opts.productId}`, null);
+    const productRule = await getSettingJson<CommissionRules | null>(`commission_product_${opts.productId}`, null);
     if (productRule) return { ...global, ...productRule };
   }
   if (opts?.companyId) {
-    const companyRule = await getSettingJson<CommissionRules>(`commission_company_${opts.companyId}`, null);
+    const companyRule = await getSettingJson<CommissionRules | null>(`commission_company_${opts.companyId}`, null);
     if (companyRule) return { ...global, ...companyRule };
   }
   return global;
