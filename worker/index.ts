@@ -130,7 +130,7 @@ async function processNotificationJob(job: { name: string; data: Record<string, 
   console.log('[Worker] Notification job', job.name, job.data);
 }
 
-function run() {
+async function run() {
   const orderWorker = createOrderWorker(async (job) => {
     await processOrderJob(job);
   });
