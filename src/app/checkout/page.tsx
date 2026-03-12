@@ -410,7 +410,7 @@ function CheckoutContent() {
               public_key: data.fedapay!.publicKey,
               environment: data.fedapay!.environment ?? 'sandbox',
               transaction: {
-                amount: Math.round(data.amountToPay),
+                amount: Math.round(data.amountToPay ?? 0),
                 description: `Commande ${data.order!.orderNumber}`,
                 custom_metadata: {
                   orderNumber: data.order!.orderNumber,
