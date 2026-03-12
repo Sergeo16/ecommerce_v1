@@ -171,7 +171,7 @@ export default function RegisterPage() {
       <div className="absolute top-4 left-4 z-10">
         <AppLogo className="btn btn-ghost text-lg btn-sm sm:btn-md" />
       </div>
-      <div className="absolute top-4 right-4 flex flex-wrap gap-2 justify-end z-10">
+      <div className="absolute top-4 right-4 flex flex-nowrap gap-2 justify-end items-center z-10">
         <ThemeSwitcher />
         <LocaleSwitcher />
       </div>

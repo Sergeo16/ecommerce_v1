@@ -95,7 +95,7 @@ export default function DashboardPage() {
                 <Link href="/catalog" className="block px-4 py-2 hover:bg-base-200" onClick={() => setMenuOpen(false)}>{t('catalog')}</Link>
                 <Link href="/dashboard" className="block px-4 py-2 hover:bg-base-200 font-semibold" onClick={() => setMenuOpen(false)}>{t('dashboard')}</Link>
                 <div className="border-t border-base-300 my-2" />
-                <div className="px-4 py-2 flex gap-2"><ThemeSwitcher /><LocaleSwitcher /></div>
+                <div className="px-4 py-2 flex flex-nowrap gap-2 items-center"><ThemeSwitcher /><LocaleSwitcher /></div>
                 <div className="px-4 py-2 border-t border-base-300">
                   <span className="text-sm opacity-80">{user.firstName} ({t(roleToDisplayKey(user.role))})</span>
                 </div>

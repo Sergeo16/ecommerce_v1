@@ -13,13 +13,16 @@ const LOCALES: { value: Locale; label: string }[] = [
 export function LocaleSwitcher({ className = '' }: { className?: string }) {
   const { locale, setLocale, t } = useLocale();
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const ref = useRef<HTMLDivElement>(null);
+
+  const DROPDOWN_WIDTH = 160; // w-40
 
   useEffect(() => {
     if (open && ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - DROPDOWN_WIDTH - 8));
+      setPosition({ top: rect.bottom + 4, left });
     }
   }, [open]);
 
@@ -39,7 +42,7 @@ export function LocaleSwitcher({ className = '' }: { className?: string }) {
       id="locale-dropdown-portal"
       className="fixed z-[200] p-2 shadow-xl bg-base-100 border border-base-300 rounded-box w-40 menu"
       role="menu"
-      style={{ top: position.top, right: position.right, left: 'auto' }}
+      style={{ top: position.top, left: position.left }}
     >
       {LOCALES.map(({ value, label }) => (
         <li key={value} role="none">

@@ -83,7 +83,7 @@ export default function HomePage() {
               <Link href="/auth/login" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('login')}</Link>
               <Link href="/auth/register" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('register')}</Link>
               <div className="border-t border-base-300 my-2" />
-              <div className="px-4 py-3 flex items-center gap-2">
+              <div className="px-4 py-3 flex items-center flex-nowrap gap-2">
                 <ThemeSwitcher />
                 <LocaleSwitcher />
               </div>

@@ -202,7 +202,7 @@ export default function CatalogPage() {
               <Link href="/auth/login" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('login')}</Link>
               <Link href="/dashboard" className="px-4 py-3 hover:bg-base-200 text-left font-medium text-base-content" onClick={closeMenu}>{t('dashboard')}</Link>
               <div className="border-t border-base-300 my-2" />
-              <div className="px-4 py-3 flex items-center gap-2">
+              <div className="px-4 py-3 flex items-center flex-nowrap gap-2">
                 <ThemeSwitcher />
                 <LocaleSwitcher />
               </div>

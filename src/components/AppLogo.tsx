@@ -10,7 +10,7 @@ type AppLogoProps = {
 export function AppLogo({ className = 'btn btn-ghost text-xl' }: AppLogoProps) {
   const { t } = useLocale();
   return (
-    <Link href="/" className={className} aria-label={t('appName')}>
+    <Link href="/" className={`whitespace-nowrap ${className}`} aria-label={t('appName')}>
       {t('appName')}
     </Link>
   );
