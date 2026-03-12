@@ -138,7 +138,7 @@ export default function MyProductsPage() {
                 key={p.id}
                 product={p}
                 token={token}
-                t={t}
+                t={(key: string) => t(key as any)}
                 locale={locale ?? 'fr'}
                 onDeleted={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}
               />
