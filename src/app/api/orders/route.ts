@@ -9,6 +9,7 @@ import { CANONICAL_CURRENCY, isPaymentAcceptedCurrency, convertToXOF, normalizeC
 import { sanitizeShippingAddress, validateShippingAddress, sanitizeEmail } from '@/lib/validate-fields';
 import { getShippingAmountXOF, shippingInCurrency } from '@/lib/shipping';
 import type { PaymentModeOrder, PaymentMethod } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
         balanceDue: total - advance,
         currency,
         affiliateLinkId,
-        shippingAddress: shippingForDb,
+        shippingAddress: shippingForDb as Prisma.InputJsonValue,
       },
     });
 
@@ -327,7 +328,7 @@ export async function POST(request: NextRequest) {
       balanceDue: total - paidAmount,
       currency,
       affiliateLinkId,
-      shippingAddress: shippingForDb,
+      shippingAddress: shippingForDb as Prisma.InputJsonValue,
     },
   });
 
