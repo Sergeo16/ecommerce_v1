@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { Role, UserStatus, type Prisma } from '@prisma/client';
 import { auditLog } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
@@ -12,9 +13,13 @@ export async function GET(request: NextRequest) {
   const page = Math.max(0, parseInt(searchParams.get('page') ?? '0', 10));
   const limit = Math.min(50, parseInt(searchParams.get('limit') ?? '20', 10));
 
-  const where: { status?: string; role?: string } = {};
-  if (status) where.status = status;
-  if (userRole) where.role = userRole;
+  const where: Prisma.UserWhereInput = {};
+  if (status && Object.values(UserStatus).includes(status as UserStatus)) {
+    where.status = status as UserStatus;
+  }
+  if (userRole && Object.values(Role).includes(userRole as Role)) {
+    where.role = userRole as Role;
+  }
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
