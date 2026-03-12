@@ -13,9 +13,9 @@ import { useLocale } from '@/context/LocaleContext';
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 2;
 // Noms et catégories : lettres (accentuées ou non), chiffres, espaces et ponctuation courante.
-// On évite les regex Unicode `\p{L}` / `\p{N}` pour rester compatible avec une cible TS < ES6.
+// On évite les regex Unicode `\p{L}` / `\p{N}` et le flag `u` pour rester compatibles avec une cible TS < ES6.
 const ALLOWED_NAME = /^[A-Za-z0-9À-ÖØ-öø-ÿ\s\-',.?!:;()]*$/;
-const ALLOWED_DESCRIPTION = /^[^<>\\]*$/u;
+const ALLOWED_DESCRIPTION = /^[^<>\\]*$/;
 const ALLOWED_CATEGORY = /^[A-Za-z0-9À-ÖØ-öø-ÿ\s\-',.?!:;()]*$/;
 
 function PaperclipIcon({ className }: { className?: string }) {
