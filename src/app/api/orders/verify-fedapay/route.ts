@@ -57,10 +57,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const advancePct = order.advancePercent != null ? Number(order.advancePercent) : 30;
   const paidAmount =
     order.paymentMode === 'FULL_UPFRONT'
       ? Number(order.total)
-      : Math.round((Number(order.total) * (order.advancePercent ?? 30)) / 100);
+      : Math.round((Number(order.total) * advancePct) / 100);
 
   await prisma.order.update({
     where: { id: order.id },
