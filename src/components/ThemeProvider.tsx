@@ -15,13 +15,37 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('business');
 
   useEffect(() => {
-    const saved = (typeof window !== 'undefined' && localStorage.getItem(THEME_KEY)) as Theme | null;
-    if (saved && ['dark', 'business', 'corporate', 'luxury', 'cyberpunk'].includes(saved)) {
-      setThemeState(saved);
-      document.documentElement.setAttribute('data-theme', saved);
-    } else {
-      document.documentElement.setAttribute('data-theme', 'business');
-    }
+    let cancelled = false;
+    const load = async () => {
+      if (typeof window === 'undefined') return;
+      const saved = localStorage.getItem(THEME_KEY) as Theme | null;
+      const allowed: Theme[] = ['dark', 'business', 'corporate', 'luxury', 'cyberpunk'];
+
+      if (saved && allowed.includes(saved)) {
+        if (cancelled) return;
+        setThemeState(saved);
+        document.documentElement.setAttribute('data-theme', saved);
+        return;
+      }
+
+      // Aucun thème utilisateur : récupérer le thème global configuré par le Super Admin
+      try {
+        const res = await fetch('/api/config/theme', { cache: 'no-store' });
+        const data = (await res.json().catch(() => ({}))) as { theme?: string };
+        const globalTheme = (data.theme as Theme | undefined) && allowed.includes(data.theme as Theme) ? (data.theme as Theme) : 'business';
+        if (cancelled) return;
+        setThemeState(globalTheme);
+        document.documentElement.setAttribute('data-theme', globalTheme);
+      } catch {
+        if (cancelled) return;
+        document.documentElement.setAttribute('data-theme', 'business');
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const setTheme = (t: Theme) => {
