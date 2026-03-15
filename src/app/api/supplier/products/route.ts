@@ -106,26 +106,73 @@ export async function POST(request: NextRequest) {
   if (!companyId) companyId = body.companyProfileId ?? null;
   if (!companyId) return NextResponse.json({ error: 'companyProfileId required' }, { status: 400 });
 
-  const product = await prisma.product.create({
-    data: {
-      companyProfileId: companyId,
-      categoryId: categoryId || undefined,
-      name,
-      slug: slug || `product-${Date.now()}`,
-      description,
-      productType,
-      price,
-      currency,
-      affiliateCommissionPercent,
-      sku,
-      trackInventory,
-      stockQuantity,
-      imageUrls,
-      mainImageIndex,
-      videoUrls,
-      isActive: true,
-    },
-  });
+  // Garantir un slug unique par entreprise (éviter P2002 + course critique)
+  const baseSlug = slug || 'product';
+  let finalSlug = baseSlug;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (attempt > 0) finalSlug = `${baseSlug}-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+    const exists = await prisma.product.findFirst({
+      where: { companyProfileId: companyId, slug: finalSlug },
+    });
+    if (!exists) break;
+  }
+
+  let product;
+  try {
+    product = await prisma.product.create({
+      data: {
+        companyProfileId: companyId,
+        categoryId: categoryId || undefined,
+        name,
+        slug: finalSlug,
+        description,
+        productType,
+        price,
+        currency,
+        affiliateCommissionPercent,
+        sku,
+        trackInventory,
+        stockQuantity,
+        imageUrls,
+        mainImageIndex,
+        videoUrls,
+        isActive: true,
+      },
+    });
+  } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : '';
+    if (code === 'P2002') {
+      // Course critique : réessayer une fois avec slug aléatoire
+      finalSlug = `${baseSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        product = await prisma.product.create({
+          data: {
+            companyProfileId: companyId,
+            categoryId: categoryId || undefined,
+            name,
+            slug: finalSlug,
+            description,
+            productType,
+            price,
+            currency,
+            affiliateCommissionPercent,
+            sku,
+            trackInventory,
+            stockQuantity,
+            imageUrls,
+            mainImageIndex,
+            videoUrls,
+            isActive: true,
+          },
+        });
+      } catch (retryErr) {
+        console.error('Product create P2002 retry failed:', retryErr);
+        return NextResponse.json({ error: 'slug_duplicate_retry' }, { status: 500 });
+      }
+    } else {
+      throw err;
+    }
+  }
 
   return NextResponse.json({
     ...product,
