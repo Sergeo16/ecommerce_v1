@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ProductImage } from '@/components/ProductImage';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -132,12 +132,11 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             <div className="relative">
               <figure className="bg-base-300 rounded-lg border border-base-300 aspect-square max-h-[400px] flex items-center justify-center overflow-hidden relative">
                 {mainImageUrlAbs ? (
-                  <Image
+                  <ProductImage
                     src={mainImageUrlAbs}
                     alt={product.name}
                     fill
                     className="object-contain"
-                    sizes="(max-width: 768px) 100vw, 50vw"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                       const fallback = (e.target as HTMLImageElement).nextElementSibling;
@@ -186,7 +185,7 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                     }`}
                     onClick={() => setSelectedImageIndex(i)}
                   >
-                    <Image src={imageUrlsAbs[i] ?? url} alt="" width={64} height={64} className="object-cover w-full h-full" />
+                    <ProductImage src={imageUrlsAbs[i] ?? url} alt="" width={64} height={64} className="object-cover w-full h-full" />
                   </button>
                 ))}
               </div>

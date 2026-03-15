@@ -7,8 +7,18 @@ const nextConfig = {
     serverComponentsExternalPackages: ['sharp'],
   },
   images: {
-    domains: ['localhost', 's3.amazonaws.com', '*.amazonaws.com'],
-    remotePatterns: [{ protocol: 'https', hostname: '**.amazonaws.com', pathname: '/**' }],
+    unoptimized: true, // évite les 400 sur _next/image avec R2 et /api/uploads (disque éphémère)
+    remotePatterns: [
+      // AWS S3 (bucket.s3.region.amazonaws.com)
+      { protocol: 'https', hostname: '**.amazonaws.com', pathname: '/**' },
+      // Render (ecommerce-marketplace-smvw.onrender.com)
+      { protocol: 'https', hostname: '*.onrender.com', pathname: '/**' },
+      // Cloudflare R2 (pub-xxx.r2.dev)
+      { protocol: 'https', hostname: '*.r2.dev', pathname: '/**' },
+      // Local dev
+      { protocol: 'http', hostname: 'localhost', pathname: '/**' },
+      { protocol: 'http', hostname: '127.0.0.1', pathname: '/**' },
+    ],
   },
 };
 

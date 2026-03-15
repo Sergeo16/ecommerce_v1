@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ProductImage } from '@/components/ProductImage';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { AppLogo } from '@/components/AppLogo';
@@ -266,7 +266,7 @@ export default function CatalogPage() {
                 <Link href={`/p/${p.slug}?id=${p.id}`} className="block flex-1 min-h-0">
                   <figure className="h-40 bg-base-300 shrink-0 border-b border-base-300 relative">
                     {imgSrc ? (
-                      <Image src={imgSrc} alt={p.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
+                      <ProductImage src={imgSrc} alt={p.name} fill />
                     ) : (
                       <span className="text-4xl opacity-50">📦</span>
                     )}

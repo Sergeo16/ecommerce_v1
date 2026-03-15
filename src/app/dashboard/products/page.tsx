@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ProductImage } from '@/components/ProductImage';
 import { useAuth } from '@/context/AuthContext';
 import { AppLogo } from '@/components/AppLogo';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -56,7 +56,7 @@ function ProductCard({
       <Link href={`/p/${p.slug}?id=${p.id}`} className="block">
         <figure className="h-40 bg-base-300 relative">
           {imgSrc ? (
-            <Image src={imgSrc} alt={p.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+            <ProductImage src={imgSrc} alt={p.name} fill />
           ) : (
             <span className="text-4xl opacity-50">📦</span>
           )}

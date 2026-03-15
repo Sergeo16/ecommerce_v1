@@ -104,6 +104,22 @@ export async function PATCH(
     return NextResponse.json({ error: 'name et price requis' }, { status: 400 });
   }
 
+  const finalSlug = slug || existing.slug;
+  let slugToUse = finalSlug;
+  if (finalSlug !== existing.slug) {
+    let suffix = 0;
+    let taken = true;
+    while (taken) {
+      const cand = suffix === 0 ? finalSlug : `${finalSlug}-${suffix}`;
+      const conflict = await prisma.product.findFirst({
+        where: { companyProfileId: existing.companyProfileId, slug: cand, id: { not: id } },
+      });
+      taken = !!conflict;
+      if (!taken) slugToUse = cand;
+      else suffix++;
+    }
+  }
+
   const product = await prisma.product.update({
     where: { id },
     data: {
