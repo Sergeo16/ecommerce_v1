@@ -1,19 +1,28 @@
 /**
- * S3 (compatible) : upload avatars, preuves livraison, documents
+ * S3 (compatible) : upload avatars, preuves livraison, documents.
+ * Supporte Amazon S3 et Cloudflare R2 (via S3_ENDPOINT + S3_PUBLIC_BASE_URL).
  */
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const bucket = process.env.S3_BUCKET ?? 'marketplace-uploads';
-const region = process.env.AWS_REGION ?? 'eu-west-1';
+const s3Endpoint = process.env.S3_ENDPOINT;
+const s3PublicBaseUrl = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, '') ?? ''; // sans slash final
+const isR2 = Boolean(s3Endpoint);
+
+// R2 : S3_ACCESS_KEY / S3_SECRET_KEY + S3_REGION=auto. Sinon : AWS_*.
+const accessKey = process.env.S3_ACCESS_KEY ?? process.env.AWS_ACCESS_KEY_ID ?? '';
+const secretKey = process.env.S3_SECRET_KEY ?? process.env.AWS_SECRET_ACCESS_KEY ?? '';
+const region = isR2 ? (process.env.S3_REGION ?? 'auto') : (process.env.AWS_REGION ?? 'eu-west-1');
 
 const client = new S3Client({
   region,
-  ...(process.env.AWS_ACCESS_KEY_ID && {
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
+  ...(s3Endpoint && {
+    endpoint: s3Endpoint,
+    forcePathStyle: true,
+  }),
+  ...(accessKey && secretKey && {
+    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
   }),
 });
 
@@ -30,6 +39,7 @@ export async function uploadFile(
       ContentType: contentType,
     })
   );
+  if (s3PublicBaseUrl) return `${s3PublicBaseUrl}/${key}`;
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
