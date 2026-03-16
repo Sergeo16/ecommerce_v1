@@ -53,6 +53,8 @@ export default function CatalogPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+  const [categoriesModalOpen, setCategoriesModalOpen] = useState(false);
+  const closeCategoriesModal = () => setCategoriesModalOpen(false);
   const [creatingLink, setCreatingLink] = useState(false);
 
   useEffect(() => {
@@ -220,31 +222,107 @@ export default function CatalogPage() {
             <Link href="/dashboard/affiliate/links" className="btn btn-sm btn-ghost">{t('cancel')}</Link>
           </div>
         )}
-          <div className="flex flex-wrap gap-2 mb-6 p-3 rounded-lg border border-base-300 bg-base-100/50">
-          <Link
-            href={affiliateCreate ? `/catalog?affiliate_create=${affiliateCreate}` : '/catalog'}
-            className="btn btn-sm btn-ghost text-base-content"
-          >
-            {t('all')}
-          </Link>
-          {categories.map((c) =>
-            affiliateCreate === 'category' ? (
-              <button
-                key={c.id}
-                type="button"
-                className="btn btn-sm btn-outline border-base-300 text-base-content"
-                onClick={() => createAffiliateLink(undefined, c.slug)}
-                disabled={creatingLink}
-              >
-                {creatingLink ? t('loading') : c.name}
-              </button>
-            ) : (
-              <Link key={c.id} href={`/catalog?category=${c.slug}${affiliateCreate ? `&affiliate_create=${affiliateCreate}` : ''}`} className="btn btn-sm btn-outline border-base-300 text-base-content">
-                {c.name}
-              </Link>
-            )
-          )}
+        {/* Catégories : sur petit écran = bouton + modale ; sur grand écran = barre inline */}
+        <div className="flex flex-wrap gap-2 mb-6 p-3 rounded-lg border border-base-300 bg-base-100/50">
+          {/* Desktop (sm+) : barre de catégories inline */}
+          <div className="hidden sm:flex flex-wrap gap-2">
+            <Link
+              href={affiliateCreate ? `/catalog?affiliate_create=${affiliateCreate}` : '/catalog'}
+              className="btn btn-sm btn-ghost text-base-content"
+            >
+              {t('all')}
+            </Link>
+            {categories.map((c) =>
+              affiliateCreate === 'category' ? (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="btn btn-sm btn-outline border-base-300 text-base-content"
+                  onClick={() => createAffiliateLink(undefined, c.slug)}
+                  disabled={creatingLink}
+                >
+                  {creatingLink ? t('loading') : c.name}
+                </button>
+              ) : (
+                <Link key={c.id} href={`/catalog?category=${c.slug}${affiliateCreate ? `&affiliate_create=${affiliateCreate}` : ''}`} className="btn btn-sm btn-outline border-base-300 text-base-content">
+                  {c.name}
+                </Link>
+              )
+            )}
+          </div>
+          {/* Mobile : bouton qui ouvre la modale des catégories */}
+          <div className="sm:hidden flex-1 min-w-0">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline border-base-300 w-full justify-start gap-2"
+              onClick={() => setCategoriesModalOpen(true)}
+              aria-expanded={categoriesModalOpen}
+              aria-label={t('categories')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span>{t('categories')}</span>
+              {categorySlug && (
+                <span className="badge badge-primary badge-sm ml-auto">{categories.find((cat) => cat.slug === categorySlug)?.name ?? categorySlug}</span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Modale catégories (mobile) */}
+        {categoriesModalOpen && (
+          <div
+            className="fixed inset-0 z-[200] flex items-end sm:hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('categories')}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeCategoriesModal} aria-hidden />
+            <div className="relative bg-base-100 rounded-t-2xl shadow-2xl w-full max-h-[70vh] overflow-y-auto py-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-4 pb-3 border-b border-base-300 sticky top-0 bg-base-100 z-10">
+                <span className="font-semibold text-lg text-base-content">{t('categories')}</span>
+                <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={closeCategoriesModal} aria-label={t('cancel')}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <nav className="flex flex-col py-2 px-2">
+                <Link
+                  href={affiliateCreate ? `/catalog?affiliate_create=${affiliateCreate}` : '/catalog'}
+                  className="px-4 py-3 rounded-lg hover:bg-base-200 text-left font-medium text-base-content flex items-center"
+                  onClick={closeCategoriesModal}
+                >
+                  {t('all')}
+                </Link>
+                {categories.map((c) =>
+                  affiliateCreate === 'category' ? (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="px-4 py-3 rounded-lg hover:bg-base-200 text-left font-medium text-base-content w-full flex items-center"
+                      onClick={() => {
+                        createAffiliateLink(undefined, c.slug);
+                        closeCategoriesModal();
+                      }}
+                      disabled={creatingLink}
+                    >
+                      {creatingLink ? t('loading') : c.name}
+                    </button>
+                  ) : (
+                    <Link
+                      key={c.id}
+                      href={`/catalog?category=${c.slug}${affiliateCreate ? `&affiliate_create=${affiliateCreate}` : ''}`}
+                      className="px-4 py-3 rounded-lg hover:bg-base-200 text-left font-medium text-base-content flex items-center"
+                      onClick={closeCategoriesModal}
+                    >
+                      {c.name}
+                    </Link>
+                  )
+                )}
+              </nav>
+            </div>
+          </div>
+        )}
         {affiliateCreate === 'category' && !loading && categories.length === 0 && (
           <p className="text-center text-warning mb-4">{t('affiliateNoCategories')}</p>
         )}
