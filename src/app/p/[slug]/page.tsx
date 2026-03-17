@@ -20,15 +20,28 @@ function toAbsoluteMediaUrl(url: string): string {
   return `${window.location.origin}${path}`;
 }
 
-/** Extrait l’ID vidéo YouTube d’une URL (youtube.com/watch?v=ID ou youtu.be/ID). */
+/** Extrait l’ID vidéo YouTube depuis plusieurs formats (watch, youtu.be, shorts, embed). */
 function getYoutubeVideoId(url: string): string | null {
   if (!url || typeof url !== 'string') return null;
   try {
     const u = new URL(url.trim());
-    if (u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') {
-      return u.searchParams.get('v') || null;
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+
+    // Ex: https://youtu.be/VIDEO_ID
+    if (host === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+
+    // Ex: https://www.youtube.com/watch?v=VIDEO_ID
+    if (host.endsWith('youtube.com')) {
+      const v = u.searchParams.get('v');
+      if (v) return v;
+
+      // Ex: https://www.youtube.com/shorts/VIDEO_ID
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'shorts' && parts[1]) return parts[1];
+
+      // Ex: https://www.youtube.com/embed/VIDEO_ID
+      if (parts[0] === 'embed' && parts[1]) return parts[1];
     }
-    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
   } catch {
     return null;
   }
